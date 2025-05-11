@@ -32,3 +32,8 @@ resource "google_sql_user" "admin" {
   name     = data.google_secret_manager_secret_version.mysql_admin_username.secret_data
   password = data.google_secret_manager_secret_version.mysql_admin_password.secret_data
 }
+
+# NOTE: There are SQL codes that configures schema in src/sql.
+# I didn't implement it yet since we don't expect much schema changes,
+# But if so, consider to implement auto apply of those SQL codes.
+# Maybe using local-exec provisioner.
