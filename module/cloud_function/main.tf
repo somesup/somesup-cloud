@@ -10,9 +10,14 @@ resource "google_cloudfunctions2_function" "main" {
         object = var.source_archive_object
       }
     }
-    runtime               = var.runtime
-    entry_point           = var.entry_point
-    environment_variables = var.environment_variables
+    runtime     = var.runtime
+    entry_point = var.entry_point
+    environment_variables = merge(
+      var.environment_variables,
+      {
+        "SOURCE_ARCHIVE_HASH" = var.source_archive_hash
+      }
+    )
   }
 
   service_config {

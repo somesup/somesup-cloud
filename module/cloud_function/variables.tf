@@ -23,6 +23,11 @@ variable "source_archive_object" {
   description = "The name of the GCS object (zip file) containing the source code."
 }
 
+variable "source_archive_hash" {
+  type        = string
+  description = "The hash of the source archive for verification."
+}
+
 variable "runtime" {
   type        = string
   description = "The runtime environment for the Cloud Function."
