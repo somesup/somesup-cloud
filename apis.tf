@@ -22,3 +22,8 @@ resource "google_project_service" "cloud_build" {
   project = var.project
   service = "cloudbuild.googleapis.com"
 }
+
+resource "google_project_service" "vertex_ai" {
+  project = var.project
+  service = "aiplatform.googleapis.com"
+}
