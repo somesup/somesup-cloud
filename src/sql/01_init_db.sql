@@ -17,6 +17,7 @@ CREATE TABLE somesup.article (
   section       VARCHAR(30)   NULL,
   thumbnail_url VARCHAR(255)  NOT NULL,
   news_url      VARCHAR(255)  NOT NULL,
+  is_processed  BOOLEAN       NOT NULL DEFAULT FALSE,
   created_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
   PRIMARY KEY (id),
