@@ -1,3 +1,15 @@
+data "archive_file" "source" {
+  type        = "zip"
+  source_dir  = var.source_dir
+  output_path = "/tmp/${var.function_name}.zip"
+}
+
+resource "google_storage_bucket_object" "source" {
+  name   = "${var.function_name}.zip"
+  bucket = var.source_bucket_name
+  source = data.archive_file.source.output_path
+}
+
 resource "google_cloudfunctions2_function" "main" {
   project  = var.project_id
   location = var.location
@@ -6,18 +18,13 @@ resource "google_cloudfunctions2_function" "main" {
   build_config {
     source {
       storage_source {
-        bucket = var.source_archive_bucket
-        object = var.source_archive_object
+        bucket = google_storage_bucket_object.source.bucket
+        object = google_storage_bucket_object.source.name
       }
     }
-    runtime     = var.runtime
-    entry_point = var.entry_point
-    environment_variables = merge(
-      var.environment_variables,
-      {
-        "SOURCE_ARCHIVE_HASH" = var.source_archive_hash
-      }
-    )
+    runtime               = var.runtime
+    entry_point           = var.entry_point
+    environment_variables = var.environment_variables
   }
 
   service_config {
@@ -39,5 +46,9 @@ resource "google_cloudfunctions2_function" "main" {
       pubsub_topic   = var.trigger_pubsub_topic
       retry_policy   = var.retry_policy
     }
+  }
+
+  lifecycle {
+    replace_triggered_by = [google_storage_bucket_object.source]
   }
 }
