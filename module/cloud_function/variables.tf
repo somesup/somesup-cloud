@@ -13,19 +13,17 @@ variable "function_name" {
   description = "The name of the Cloud Function."
 }
 
-variable "source_archive_bucket" {
+variable "source_dir" {
   type        = string
-  description = "The name of the GCS bucket where the source code is stored."
+  description = <<-EOT
+    The path to the source code directory that will be zipped and uploaded.
+    Please include absolute path using path.module (e.g., "{path.module}/../src/function").
+  EOT
 }
 
-variable "source_archive_object" {
+variable "source_bucket_name" {
   type        = string
-  description = "The name of the GCS object (zip file) containing the source code."
-}
-
-variable "source_archive_hash" {
-  type        = string
-  description = "The hash of the source archive for verification."
+  description = "The name of the GCS bucket where the zipped source code will be uploaded for Cloud Function deployment."
 }
 
 variable "runtime" {
