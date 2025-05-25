@@ -5,7 +5,7 @@ import logging
 import os
 import sys
 from contextlib import contextmanager
-from typing import Any, Dict, Iterator, Optional, Tuple
+from typing import Any, Iterator, Optional
 
 import eventregistry
 import functions_framework
@@ -89,7 +89,7 @@ class Article:
     source_name: str
 
     @classmethod
-    def from_api_response(cls, article: Dict[str, Any]) -> 'Article':
+    def from_api_response(cls, article: dict[str, Any]) -> 'Article':
         """Creates an Article instance from API response data.
         
         Args:
@@ -139,8 +139,8 @@ class NewsApiClient:
         self,
         start_date: str,
         end_date: str,
-        source_rank_percentile: int = 10,
-        num_articles: int = 10,
+        source_rank_percentile: int,
+        num_articles: int,
     ) -> list[Article]:
         """Fetches articles from the News API within the specified date range.
         
@@ -367,7 +367,8 @@ class NewsFetcher:
         fromt_date: datetime.date,
         to_date: datetime.date,
         num_articles: int,
-    ) -> Tuple[int, int]:
+        source_rank_percentile: int,
+    ) -> tuple[int, int]:
         """Fetches articles from API and stores them in the database.
         
         This method performs the complete workflow of fetching articles from the
@@ -389,6 +390,7 @@ class NewsFetcher:
             start_date=fromt_date.isoformat(),
             end_date=to_date.isoformat(),
             num_articles=num_articles,
+            source_rank_percentile=source_rank_percentile,
         )
 
         if not articles:
@@ -447,7 +449,6 @@ def main(request) -> dict[str, Any]:
             - from_date: Start date of the fetch operation (ISO format)
             - to_date: End date of the fetch operation (ISO format)
     """
-
     try:
         config = Config()
         config.validate()
@@ -457,6 +458,13 @@ def main(request) -> dict[str, Any]:
             "statusCode": 500,
             "body": json.dumps({"error": str(e)}),
         }
+
+    # Parse query parameters with defaults
+    num_articles = int(
+        request.args.get('num_articles', Config.DEFAULT_NUM_ARTICLES))
+    source_rank_percentile = int(
+        request.args.get('source_rank_percentile',
+                         Config.DEFAULT_SOURCE_RANK_PERCENTILE))
 
     newsapi_client = NewsApiClient(config.NEWSAPI_API_KEY)
     db_client = DatabaseClient(
@@ -473,7 +481,8 @@ def main(request) -> dict[str, Any]:
     stored_count, total_count = news_fetcher.fetch_and_store(
         fromt_date=from_date,
         to_date=to_date,
-        num_articles=Config.DEFAULT_NUM_ARTICLES,
+        num_articles=num_articles,
+        source_rank_percentile=source_rank_percentile,
     )
 
     return {
