@@ -1,35 +1,19 @@
+import dataclasses
 import datetime
-import sys
 import json
 import logging
 import os
-from typing import Any
+import sys
+from contextlib import contextmanager
+from typing import Any, Iterator, Optional
 
-import flask
+import functions_framework
 import google.cloud.sql.connector
 import pymysql
 import pymysql.connections
-import pymysql.cursors
 import requests
 from requests.exceptions import RequestException
 
-
-# Constants
-class Config:
-    """Application configuration management"""
-    GUARDIAN_API_URL = "https://content.guardianapis.com/search"
-    GUARDIAN_API_KEY = os.getenv('GUARDIAN_API_KEY')
-    GUARDIAN_PROVIDER_ID = 1  # Guardian Provider ID in article_provider table
-
-    INSTANCE_CONNECTION_NAME = os.getenv('INSTANCE_CONNECTION_NAME')
-    MYSQL_USERNAME = os.getenv('MYSQL_FETCHER_USERNAME')
-    MYSQL_PASSWORD = os.getenv('MYSQL_FETCHER_PASSWORD')
-    MYSQL_DATABASE = 'somesup'
-
-    DEFAULT_NUM_ARTICLES = 5
-
-
-# Logging configuration
 logging.basicConfig(
     level=logging.INFO,
     stream=sys.stdout,
@@ -38,10 +22,119 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class GuardianClient:
-    """Client for interacting with the Guardian API"""
+class Config:
+    """Configuration class for managing environment variables and default values.
+    
+    This class centralizes all configuration parameters required for the Guardian
+    news fetching service, including API keys, database connection details, and
+    default values for article fetching.
+    
+    Attributes:
+        GUARDIAN_API_KEY: API key for accessing the Guardian API service.
+        GUARDIAN_API_URL: Base URL for the Guardian API.
+        INSTANCE_CONNECTION_NAME: Google Cloud SQL instance connection name.
+        MYSQL_USERNAME: MySQL database username for authentication.
+        MYSQL_PASSWORD: MySQL database password for authentication.
+        MYSQL_DATABASE: Name of the MySQL database to connect to.
+        DEFAULT_NUM_ARTICLES: Default number of articles to fetch per request.
+        GUARDIAN_PROVIDER_NAME: Name of the Guardian provider for database storage.
+    """
 
-    def __init__(self, api_key: str, api_url: str):
+    GUARDIAN_API_KEY = os.getenv('GUARDIAN_API_KEY', '')
+    GUARDIAN_API_URL = "https://content.guardianapis.com/search"
+
+    INSTANCE_CONNECTION_NAME = os.getenv('INSTANCE_CONNECTION_NAME', '')
+    MYSQL_USERNAME = os.getenv('MYSQL_FETCHER_USERNAME', '')
+    MYSQL_PASSWORD = os.getenv('MYSQL_FETCHER_PASSWORD', '')
+    MYSQL_DATABASE = 'somesup'
+
+    DEFAULT_NUM_ARTICLES = 5
+    GUARDIAN_PROVIDER_NAME = "The Guardian"
+
+    def validate(self) -> None:
+        """Validates that all required configuration values are set.
+        
+        Raises:
+            ValueError: If any required environment variable is not set or empty.
+        """
+        if not self.GUARDIAN_API_KEY:
+            raise ValueError("GUARDIAN_API_KEY is not set.")
+        if not self.INSTANCE_CONNECTION_NAME:
+            raise ValueError("INSTANCE_CONNECTION_NAME is not set.")
+        if not self.MYSQL_USERNAME:
+            raise ValueError("MYSQL_FETCHER_USERNAME is not set.")
+        if not self.MYSQL_PASSWORD:
+            raise ValueError("MYSQL_FETCHER_PASSWORD is not set.")
+
+
+@dataclasses.dataclass
+class Article:
+    """Data class representing a news article.
+    
+    This class encapsulates all the essential information about a news article
+    retrieved from the Guardian API, providing a structured way to handle article data
+    throughout the application.
+    
+    Attributes:
+        title: The headline or title of the article.
+        body: The main content/body text of the article.
+        lang: Language code of the article (e.g., 'en' for English).
+        image: URL of the article's thumbnail or featured image.
+        url: Direct URL link to the original article.
+        section: The section/category of the article (e.g., 'world', 'politics').
+    """
+
+    title: str
+    body: str
+    lang: str
+    image: str
+    url: str
+    section: str
+
+    @classmethod
+    def from_api_response(cls, article: dict[str, Any]) -> 'Article':
+        """Creates an Article instance from Guardian API response data.
+        
+        Args:
+            article: Dictionary containing article data from the Guardian API response.
+                Expected to contain keys like 'webUrl', 'sectionId', and nested 'fields'
+                dictionary with 'headline', 'bodyText', 'lang', 'thumbnail'.
+        
+        Returns:
+            Article: A new Article instance populated with data from the API response.
+        """
+        fields = article.get('fields', {})
+        return cls(title=fields.get('headline', ''),
+                   body=fields.get('bodyText', ''),
+                   lang=fields.get('lang', 'en'),
+                   image=fields.get('thumbnail', ''),
+                   url=article.get('webUrl', ''),
+                   section=article.get('sectionId', ''))
+
+
+class GuardianApiClient:
+    """Client for interacting with the Guardian API.
+    
+    This class provides methods to authenticate with and fetch articles from
+    the Guardian API service, handling query construction and response processing.
+    
+    Attributes:
+        _api_key: Private API key for authentication.
+        _api_url: Base URL for the Guardian API.
+    """
+
+    def __init__(self, api_key: str, api_url: str) -> None:
+        """Initializes the GuardianApiClient with the provided API key and URL.
+        
+        Args:
+            api_key: Valid API key for accessing the Guardian service.
+            api_url: Base URL for the Guardian API.
+            
+        Raises:
+            ValueError: If the API key is empty or None.
+        """
+        if not api_key:
+            raise ValueError("API key must be provided.")
         self._api_key = api_key
         self._api_url = api_url
 
@@ -50,22 +143,18 @@ class GuardianClient:
         from_date: datetime.date,
         to_date: datetime.date,
         num_articles: int,
-    ) -> list[dict[str, Any]]:
-        """
-        Fetch articles from the Guardian API within the specified date range.
+    ) -> list[Article]:
+        """Fetches articles from the Guardian API within the specified date range.
         
         Args:
-            from_date: The start date for fetching articles (inclusive)
-            to_date: The end date for fetching articles (inclusive)
-            num_articles: Number of articles to fetch
-            
+            from_date: Start date for article search (inclusive).
+            to_date: End date for article search (inclusive).
+            num_articles: Maximum number of articles to retrieve.
+        
         Returns:
-            List of article data dictionaries
+            List of Article objects containing the fetched news articles.
+            Returns an empty list if no articles are found or if an error occurs.
         """
-        if not self._api_key:
-            logger.error("Guardian API key is not set.")
-            return []
-
         params = {
             'api-key': self._api_key,
             'from-date': from_date.isoformat(),
@@ -78,9 +167,15 @@ class GuardianClient:
         try:
             response = requests.get(self._api_url, params=params)
             response.raise_for_status()
-            articles = response.json().get('response', {}).get('results', [])
+            api_articles = response.json().get('response',
+                                               {}).get('results', [])
+
+            articles = [
+                Article.from_api_response(article) for article in api_articles
+            ]
             logger.info(f"Fetched {len(articles)} articles from Guardian API.")
             return articles
+
         except RequestException as e:
             logger.error(f"Error fetching articles from Guardian API: {e}")
             return []
@@ -90,7 +185,7 @@ class GuardianClient:
 
 
 class DatabaseClient:
-    """Client for interacting with the MySQL database"""
+    """Client for managing database operations with Google Cloud SQL."""
 
     def __init__(
         self,
@@ -98,157 +193,186 @@ class DatabaseClient:
         username: str,
         password: str,
         database: str,
-    ):
+    ) -> None:
+        """Initializes the DatabaseClient with connection parameters."""
         self._instance_name = instance_name
         self._username = username
         self._password = password
         self._database = database
 
-    def get_connection(self) -> pymysql.connections.Connection:
-        """
-        Establish a connection to the MySQL database using Cloud SQL Connector.
+        self._connector = google.cloud.sql.connector.Connector()
+
+    @contextmanager
+    def get_connection(self) -> Iterator[pymysql.connections.Connection]:
+        """Context manager for database connections.
         
-        Returns:
-            A connection object to the MySQL database
+        Provides a secure way to manage database connections with automatic
+        cleanup. The connection is automatically closed when exiting the
+        context, even if an exception occurs.
+        
+        Yields:
+            pymysql.connections.Connection: Active database connection.
+            
+        Raises:
+            Exception: Re-raises any database connection errors after logging.
         """
+        connection = None
         try:
-            connector = google.cloud.sql.connector.Connector()
-            connection = connector.connect(
+            connection = self._connector.connect(
                 self._instance_name,
                 "pymysql",
                 user=self._username,
                 password=self._password,
                 db=self._database,
             )
-            return connection
+            yield connection
         except Exception as e:
-            logger.error(f"Error connecting to database: {e}")
-            raise
+            raise e
+        finally:
+            if connection:
+                connection.close()
 
-    def article_exists(
+    def get_or_create_provider(self, provider_name: str) -> int:
+        """Retrieves or creates a news provider record in the database.
+        
+        This method first attempts to find an existing provider with the given name.
+        If no provider is found, it creates a new one and returns the new ID.
+        
+        Args:
+            provider_name: Name of the news provider/source.
+            
+        Returns:
+            int: The database ID of the provider (existing or newly created).
+        """
+        with self.get_connection() as conn:
+            provider_id = self._get_provider_id(conn, provider_name)
+            if provider_id is not None:
+                return provider_id
+
+            return self._create_provider(conn, provider_name)
+
+    def _get_provider_id(
         self,
-        cursor: pymysql.cursors.Cursor,
+        connection: pymysql.connections.Connection,
+        provider_name: str,
+    ) -> Optional[int]:
+        """Retrieves the ID of an existing provider from the database.
+        
+        Args:
+            connection: Active database connection.
+            provider_name: Name of the provider to search for.
+            
+        Returns:
+            Article Provider ID if found, None otherwise.
+        """
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id FROM article_provider WHERE name = %s",
+                           (provider_name, ))
+            result = cursor.fetchone()
+            return result[0] if result else None
+
+    def _create_provider(
+        self,
+        connection: pymysql.connections.Connection,
+        provider_name: str,
+    ) -> int:
+        """Creates a new provider record in the database.
+        
+        Args:
+            connection: Active database connection.
+            provider_name: Name of the provider to create.
+            
+        Returns:
+            The Article Provider ID of the newly created provider.
+        """
+        with connection.cursor() as cursor:
+            cursor.execute("INSERT INTO article_provider (name) VALUES (%s)",
+                           (provider_name, ))
+            connection.commit()
+            return cursor.lastrowid
+
+    def check_article_exists(
+        self,
         provider_id: int,
         title: str,
     ) -> bool:
-        """
-        Check if an article already exists in the database.
+        """Checks if an article with the given title already exists for a provider.
         
         Args:
-            cursor: Database cursor
-            provider_id: Provider ID
-            title: Article title
+            provider_id: Database ID of the article provider.
+            title: Title of the article to check for.
             
         Returns:
-            True if article exists, False otherwise
+            True if the article exists, False otherwise.
         """
-        check_sql = """
-            SELECT COUNT(*) FROM article WHERE provider_id = %s AND title = %s
-        """
-        cursor.execute(check_sql, (provider_id, title))
-        count = cursor.fetchone()[0]
-        return count > 0
-
-    def insert_article(
-        self,
-        cursor,
-        provider_id: int,
-        article: dict[str, Any],
-    ) -> bool:
-        """
-        Insert an article into the database.
-        
-        Args:
-            cursor: Database cursor
-            provider_id: Provider ID
-            article: Article data
-            
-        Returns:
-            True on success, False on failure
-        """
-        insert_sql = """
-            INSERT INTO article (provider_id, title, content, language, section, thumbnail_url, news_url)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """
-
-        fields = article.get('fields', {})
-
-        try:
-            cursor.execute(insert_sql, (
-                provider_id,
-                fields.get('headline'),
-                fields.get('bodyText'),
-                fields.get('lang'),
-                article.get('sectionId'),
-                fields.get('thumbnail'),
-                article.get('webUrl'),
-            ))
-            return True
-        except pymysql.err.IntegrityError as e:
-            logger.warning(f"Duplicate article entry: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"Error inserting article: {e}")
-            return False
-
-    def store_articles(
-        self,
-        articles: list[dict[str, Any]],
-        provider_id: int,
-    ) -> int:
-        """
-        Store a list of articles in the MySQL database.
-        
-        Args:
-            articles: List of articles to store
-            provider_id: Provider ID
-            
-        Returns:
-            Number of articles successfully stored
-        """
-        if not articles:
-            return 0
-
-        conn = None
-        stored_count = 0
-
-        try:
-            conn = self.get_connection()
+        with self.get_connection() as conn:
             with conn.cursor() as cursor:
-                for article in articles:
-                    title = article.get('fields', {}).get('headline')
-                    if self.article_exists(cursor, provider_id, title):
-                        logger.warning(
-                            f"Article '{title}' already exists in the database."
-                        )
-                        continue
+                cursor.execute(
+                    "SELECT COUNT(*) FROM article WHERE provider_id = %s AND title = %s",
+                    (provider_id, title))
+                count = cursor.fetchone()[0]
+                return count > 0
 
-                    if self.insert_article(cursor, provider_id, article):
-                        stored_count += 1
+    def create_article(
+        self,
+        provider_id: int,
+        article: Article,
+    ) -> bool:
+        """Creates a new article record in the database.
 
-            conn.commit()
-            logger.info(f"{stored_count} articles stored successfully.")
-            return stored_count
-
-        except Exception as e:
-            logger.error(f"Error storing articles: {e}")
-            if conn:
-                conn.rollback()
-            return stored_count
-
-        finally:
-            if conn:
-                conn.close()
+        This method handles duplicate articles gracefully by logging a warning
+        and returning False rather than raising an exception.
+        
+        Args:
+            provider_id: Database ID of the article provider.
+            article: Article object containing the article data to store.
+            
+        Returns:
+            True if the article was successfully created, False otherwise.
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                try:
+                    cursor.execute(
+                        "INSERT INTO article (provider_id, title, content, language, section, thumbnail_url, news_url) "
+                        "VALUES (%s, %s, %s, %s, %s, %s, %s)", (
+                            provider_id,
+                            article.title,
+                            article.body,
+                            article.lang,
+                            article.section,
+                            article.image,
+                            article.url,
+                        ))
+                    conn.commit()
+                    return True
+                except pymysql.err.IntegrityError as e:
+                    logger.warning("Article already exists: %s", e)
+                    return False
+                except Exception as e:
+                    logger.error("Error inserting article: %s", e)
+                    return False
 
 
 class NewsFetcher:
-    """Class for fetching and storing news articles"""
+    """Orchestrator class for fetching and storing news articles.
+    
+    This class combines the GuardianApiClient and DatabaseClient to provide a
+    high-level interface for the complete news fetching workflow, including
+    article retrieval, provider management, and database storage.
+    """
 
     def __init__(
         self,
-        guardian_client: GuardianClient,
+        guardian_client: GuardianApiClient,
         db_client: DatabaseClient,
-    ):
+    ) -> None:
+        """Initializes the NewsFetcher with required client dependencies.
+        
+        Args:
+            guardian_client: Configured GuardianApiClient for article fetching.
+            db_client: Configured DatabaseClient for data persistence.
+        """
         self._guardian_client = guardian_client
         self._db_client = db_client
 
@@ -257,95 +381,126 @@ class NewsFetcher:
         from_date: datetime.date,
         to_date: datetime.date,
         num_articles: int,
-        provider_id: int,
-    ) -> dict[str, Any]:
-        """
-        Fetch news articles and store them in the database.
+        provider_name: str,
+    ) -> tuple[int, int]:
+        """Fetches articles from Guardian API and stores them in the database.
+        
+        This method performs the complete workflow of fetching articles from the
+        Guardian API, managing the Guardian provider record, checking for duplicates, 
+        and storing new articles in the database.
         
         Args:
-            from_date: Start date for articles
-            to_date: End date for articles
-            num_articles: Number of articles to fetch
-            provider_id: Provider ID
+            from_date: Start date for article fetching.
+            to_date: End date for article fetching.
+            num_articles: Maximum number of articles to fetch and process.
+            provider_name: Name of the Guardian provider.
             
         Returns:
-            Dictionary with operation results
+            A tuple containing (stored_count, total_count)
+                - stored_count: The number of articles successfully stored
+                - total_count: The total number of articles fetched from the API.
         """
-        # Fetch articles from Guardian API
         articles = self._guardian_client.fetch_articles(
-            from_date, to_date, num_articles)
-
-        if not articles:
-            logger.warning("No articles found.")
-            return {
-                'statusCode': 200,
-                'body': json.dumps({"message": "No articles found."}),
-                'headers': {
-                    'Content-Type': 'application/json'
-                }
-            }
-
-        # Store articles in database
-        stored_count = self._db_client.store_articles(articles, provider_id)
-
-        return {
-            'statusCode': 200,
-            'body':
-            f"Fetched {len(articles)} articles and successfully stored {stored_count}.",
-            'headers': {
-                'Content-Type': 'application/json'
-            }
-        }
-
-
-def main(request: flask.Request) -> dict[str, Any]:
-    """
-    Main entry point for the Cloud Function.
-    
-    Args:
-        request: The incoming request object
-        
-    Returns:
-        A response dictionary with status code, body, and headers
-    """
-    try:
-        # Get the number of articles to fetch from the request (default to 5)
-        request_json = request.get_json(silent=True) or {}
-        num_articles = int(
-            request_json.get('num_articles', Config.DEFAULT_NUM_ARTICLES))
-
-        # Set the date range for fetching articles (1 day)
-        to_date = datetime.date.today()
-        from_date = to_date - datetime.timedelta(days=1)
-
-        guardian_client = GuardianClient(
-            api_key=Config.GUARDIAN_API_KEY,
-            api_url=Config.GUARDIAN_API_URL,
-        )
-
-        db_client = DatabaseClient(
-            instance_name=Config.INSTANCE_CONNECTION_NAME,
-            username=Config.MYSQL_USERNAME,
-            password=Config.MYSQL_PASSWORD,
-            database=Config.MYSQL_DATABASE,
-        )
-
-        news_fetcher = NewsFetcher(guardian_client, db_client)
-
-        result = news_fetcher.fetch_and_store(
             from_date=from_date,
             to_date=to_date,
             num_articles=num_articles,
-            provider_id=Config.GUARDIAN_PROVIDER_ID)
+        )
 
-        return result
+        if not articles:
+            logger.warning("No articles found for the given date range.")
+            return 0, 0
 
-    except Exception as e:
-        logger.error(f"Error executing Cloud Function: {e}")
+        # Get or create the Guardian provider (cache it since all articles are from Guardian)
+        provider_id = self._db_client.get_or_create_provider(provider_name)
+        logger.info(f"Using provider ID {provider_id} for {provider_name}")
+
+        stored_count = 0
+        for article in articles:
+            if self._db_client.check_article_exists(provider_id,
+                                                    article.title):
+                logger.info("Article '%s' already exists. Skipping.",
+                            article.title)
+                continue
+
+            if self._db_client.create_article(provider_id, article):
+                stored_count += 1
+
+        return stored_count, len(articles)
+
+
+@functions_framework.http
+def main(request) -> dict[str, Any]:
+    """Main entry point for the Google Cloud Function.
+    
+    This function serves as the HTTP endpoint for the Guardian news fetching service.
+    It initializes the required components, fetches articles from the previous day,
+    and stores them in the database.
+    
+    Args:
+        request: HTTP request object from the Cloud Functions framework.
+            Supports query parameters:
+                - num_articles: Number of articles to fetch (default: 5)
+    
+    Returns:
+        HTTP response dictionary containing:
+            - statusCode: HTTP status code (200 for success, 500 for error)
+            - body: JSON string containing either success data or error message
+            
+        Success response includes:
+            - stored_count: Number of articles successfully stored
+            - total_count: Total number of articles fetched
+            - from_date: Start date of the fetch operation (ISO format)
+            - to_date: End date of the fetch operation (ISO format)
+            - provider: Name of the news provider
+    """
+    try:
+        config = Config()
+        config.validate()
+    except ValueError as e:
+        logger.error("Configuration error: %s", e)
         return {
-            'statusCode': 500,
-            'body': json.dumps({"error": f"Internal server error: {str(e)}"}),
-            'headers': {
-                'Content-Type': 'application/json'
-            }
+            "statusCode": 500,
+            "body": json.dumps({"error": str(e)}),
         }
+
+    # Parse query parameters with defaults
+    num_articles = int(
+        request.args.get('num_articles', Config.DEFAULT_NUM_ARTICLES))
+
+    guardian_client = GuardianApiClient(
+        api_key=config.GUARDIAN_API_KEY,
+        api_url=config.GUARDIAN_API_URL,
+    )
+
+    db_client = DatabaseClient(
+        instance_name=config.INSTANCE_CONNECTION_NAME,
+        username=config.MYSQL_USERNAME,
+        password=config.MYSQL_PASSWORD,
+        database=config.MYSQL_DATABASE,
+    )
+
+    news_fetcher = NewsFetcher(guardian_client, db_client)
+
+    # Set the date range for fetching articles (previous day)
+    to_date = datetime.date.today()
+    from_date = to_date - datetime.timedelta(days=1)
+
+    stored_count, total_count = news_fetcher.fetch_and_store(
+        from_date=from_date,
+        to_date=to_date,
+        num_articles=num_articles,
+        provider_name=config.GUARDIAN_PROVIDER_NAME,
+    )
+
+    return {
+        "statusCode":
+        200,
+        "body":
+        json.dumps({
+            "stored_count": stored_count,
+            "total_count": total_count,
+            "from_date": from_date.isoformat(),
+            "to_date": to_date.isoformat(),
+            "provider": config.GUARDIAN_PROVIDER_NAME,
+        }),
+    }
