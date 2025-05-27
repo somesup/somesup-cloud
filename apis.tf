@@ -32,3 +32,8 @@ resource "google_project_service" "workflows" {
   project = var.project
   service = "workflows.googleapis.com"
 }
+
+resource "google_project_service" "cloud_tasks" {
+  project = var.project
+  service = "cloudtasks.googleapis.com"
+}
