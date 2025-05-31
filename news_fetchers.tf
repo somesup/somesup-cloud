@@ -64,3 +64,28 @@ module "newsapi_fetcher" {
   ]
 
 }
+
+module "clustering_articles" {
+  source = "./module/cloud_function"
+
+  project_id          = var.project
+  location            = var.region
+  function_name       = "clustering-articles"
+  source_dir          = "${path.module}/src/clustering_articles"
+  source_bucket_name  = google_storage_bucket.cloud_function.name
+  runtime             = "python313"
+  available_memory_mb = "512Mi"
+  entry_point         = "main"
+  environment_variables = {
+    PROJECT_ID               = var.project
+    LOCATION                 = var.region
+    INSTANCE_CONNECTION_NAME = google_sql_database_instance.mysql.connection_name
+    MYSQL_FETCHER_USERNAME   = data.google_secret_manager_secret_version.mysql_fetcher_username.secret_data
+    MYSQL_FETCHER_PASSWORD   = data.google_secret_manager_secret_version.mysql_fetcher_password.secret_data
+  }
+  roles = [
+    "roles/cloudsql.client",
+    "roles/cloudsql.instanceUser",
+    "roles/aiplatform.user",
+  ]
+}
