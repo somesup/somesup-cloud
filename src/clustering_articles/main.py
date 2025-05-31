@@ -1,18 +1,18 @@
-import os
 import contextlib
 import dataclasses
 import logging
+import os
 import sys
 from typing import Any, Iterator
 
-import sklearn.metrics.pairwise
-import numpy as np
-import google.genai
-import google.genai.types
 import functions_framework
 import google.cloud.sql.connector
+import google.genai
+import google.genai.types
+import numpy as np
 import pymysql
 import pymysql.cursors
+import sklearn.metrics.pairwise
 
 logging.basicConfig(
     level=logging.INFO,
