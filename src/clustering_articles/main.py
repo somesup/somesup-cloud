@@ -2,10 +2,10 @@ import contextlib
 import dataclasses
 import logging
 import os
-import sys
 from typing import Any, Iterator
 
 import functions_framework
+import google.cloud.logging
 import google.cloud.sql.connector
 import google.genai
 import google.genai.types
@@ -14,11 +14,9 @@ import pymysql
 import pymysql.cursors
 import sklearn.metrics.pairwise
 
-logging.basicConfig(
-    level=logging.INFO,
-    stream=sys.stdout,
-    format='%(levelname)s %(asctime)s %(message)s',
-)
+# Configure logging to Google Cloud Logging
+logging_client = google.cloud.logging.Client()
+logging_client.setup_logging()
 logger = logging.getLogger(__name__)
 
 
