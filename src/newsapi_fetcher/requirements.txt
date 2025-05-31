@@ -2,3 +2,4 @@ functions-framework==3.8.3
 eventregistry==9.1
 PyMySQL==1.1.1
 cloud-sql-python-connector==1.18.1
+google-cloud-logging==3.12.1

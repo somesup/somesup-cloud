@@ -4,3 +4,4 @@ PyMySQL==1.1.1
 functions-framework==3.8.3
 scikit-learn==1.6.1
 numpy==2.2.6
+google-cloud-logging==3.12.1

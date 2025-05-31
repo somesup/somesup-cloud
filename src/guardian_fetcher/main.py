@@ -3,22 +3,20 @@ import datetime
 import json
 import logging
 import os
-import sys
 from contextlib import contextmanager
 from typing import Any, Iterator, Optional
 
 import functions_framework
+import google.cloud.logging
 import google.cloud.sql.connector
 import pymysql
 import pymysql.connections
 import requests
 from requests.exceptions import RequestException
 
-logging.basicConfig(
-    level=logging.INFO,
-    stream=sys.stdout,
-    format='%(levelname)s %(asctime)s %(message)s',
-)
+# Configure logging to Google Cloud Logging
+logging_client = google.cloud.logging.Client()
+logging_client.setup_logging()
 logger = logging.getLogger(__name__)
 
 
