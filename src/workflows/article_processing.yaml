@@ -1,0 +1,50 @@
+main:
+  params: [args]
+  steps:
+    - initialize_variables:
+        assign:
+          - project: ${PROJECT}
+          - location: ${LOCATION}
+          - summary_queue_name: ${SUMMARY_QUEUE_NAME}
+          - fetcher_urls: ${FETCHER_URLS}
+          - clustering_url: ${CLUSTERING_URL}
+          - fetcher_results: []
+
+    - fetch_news_articles:
+        parallel:
+          shared: [fetcher_results]
+          for:
+            value: url
+            in: $${fetcher_urls}
+            steps:
+              - request_news_from_source:
+                  call: http.post
+                  args:
+                    url: $${url}
+                    auth:
+                      type: OIDC
+                  result: fetch_result
+
+    - cluster_fetched_articles:
+        call: http.post
+        args:
+          url: $${clustering_url}
+          auth:
+            type: OIDC
+        result: cluster_response
+
+    - extract_clustered_groups:
+        assign:
+          - clusters: $${cluster_response.body.clusters}
+
+    - summarize_each_cluster:
+        for:
+          value: cluster
+          index: idx
+          in: $${clusters}
+          steps:
+            # TODO: Implement the summarize Cloud Function and call it
+            - log_cluster_info:
+                call: sys.log
+                args:
+                  text: $${"Cluster " + string(idx) + " has " + string(len(cluster)) + " items " + json.encode_to_string(cluster)}
