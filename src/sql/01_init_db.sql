@@ -36,6 +36,6 @@ CREATE TABLE somesup.article (
 
   PRIMARY KEY (id),
 
-  FOREIGN KEY (provider_id) REFERENCES article_provider(id),
-  FOREIGN KEY (processed_id) REFERENCES processed_article(id)
+  FOREIGN KEY (provider_id) REFERENCES article_provider(id) ON DELETE CASCADE,
+  FOREIGN KEY (processed_id) REFERENCES processed_article(id) ON DELETE SET NULL
 );
