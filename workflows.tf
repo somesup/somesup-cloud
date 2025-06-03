@@ -5,8 +5,8 @@ resource "google_cloud_tasks_queue" "summary_queue" {
 
   rate_limits {
     # TODO: Adjust these limits based on vertex AI quota and limits
-    max_dispatches_per_second = 60
-    max_concurrent_dispatches = 5
+    max_dispatches_per_second = 20
+    max_concurrent_dispatches = 10
   }
 
   retry_config {
@@ -33,6 +33,7 @@ resource "google_project_iam_member" "workflow_service_account_role" {
     "roles/run.invoker",
     "roles/cloudtasks.enqueuer",
     "roles/logging.logWriter",
+    "roles/iam.serviceAccountUser",
   ])
   project = var.project
   role    = each.value
@@ -47,10 +48,12 @@ resource "google_workflows_workflow" "article_processing" {
   service_account = google_service_account.workflow_service_account.id
 
   source_contents = templatefile("${path.module}/src/workflows/article_processing.yaml", {
-    PROJECT            = var.project
-    LOCATION           = var.region
-    SUMMARY_QUEUE_NAME = google_cloud_tasks_queue.summary_queue.name
-    CLUSTERING_URL     = module.clustering_articles.function_url
+    PROJECT                  = var.project
+    LOCATION                 = var.region
+    SUMMARY_QUEUE_NAME       = google_cloud_tasks_queue.summary_queue.name
+    CLUSTERING_URL           = module.clustering_articles.function_url
+    SUMMARIZER_URL           = module.cluster_summarizer.function_url
+    WORKFLOW_SERVICE_ACCOUNT = google_service_account.workflow_service_account.email
 
     FETCHER_URLS = jsonencode([
       module.guardian_fetcher.function_url,

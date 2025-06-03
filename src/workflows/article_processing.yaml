@@ -8,6 +8,8 @@ main:
           - summary_queue_name: ${SUMMARY_QUEUE_NAME}
           - fetcher_urls: ${FETCHER_URLS}
           - clustering_url: ${CLUSTERING_URL}
+          - summarizer_url: ${SUMMARIZER_URL}
+          - workflow_service_account: ${WORKFLOW_SERVICE_ACCOUNT}
           - fetcher_results: []
 
     - fetch_news_articles:
@@ -43,8 +45,25 @@ main:
           index: idx
           in: $${clusters}
           steps:
-            # TODO: Implement the summarize Cloud Function and call it
-            - log_cluster_info:
-                call: sys.log
+            - prepare_task_payload:
+                assign:
+                  - task_payload:
+                      cluster_id: $${idx}
+                      article_ids: $${cluster}
+                  - payload_json: $${json.encode(task_payload)}
+                  - payload_base64: $${base64.encode(payload_json)}
+            - create_task_for_summarizer:
+                call: googleapis.cloudtasks.v2.projects.locations.queues.tasks.create
                 args:
-                  text: $${"Cluster " + string(idx) + " has " + string(len(cluster)) + " items " + json.encode_to_string(cluster)}
+                  parent: $${"projects/" + project + "/locations/" + location + "/queues/" + summary_queue_name}
+                  body:
+                    task:
+                      httpRequest:
+                        httpMethod: POST
+                        url: $${summarizer_url}
+                        headers:
+                          Content-Type: application/json
+                        body: $${payload_base64}
+                        oidcToken:
+                          serviceAccountEmail: $${workflow_service_account}
+                result: task_creation_result
