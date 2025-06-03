@@ -6,10 +6,17 @@ resource "google_sql_database_instance" "mysql" {
   deletion_protection = false
 
   settings {
-    tier = "db-f1-micro"
+    tier              = "db-f1-micro"
+    disk_type         = "PD_HDD"
+    disk_size         = 10
+    availability_type = "ZONAL"
 
     ip_configuration {
       ipv4_enabled = true
+    }
+
+    backup_configuration {
+      enabled = false
     }
   }
 }
