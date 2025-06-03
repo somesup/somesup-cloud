@@ -19,6 +19,7 @@ module "cluster_summarizer" {
   runtime             = "python313"
   available_memory_mb = "256Mi"
   entry_point         = "main"
+  max_instance_count  = 20
   environment_variables = {
     PROJECT_ID                = var.project
     VERTEX_AI_REGION          = "us-central1" # Gemini 2.5 is only available in us-central1
