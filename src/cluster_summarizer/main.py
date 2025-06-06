@@ -68,8 +68,8 @@ class ProcessedArticle:
     one_line_summary: str
     full_summary: str
     language: str
+    section: str
     region: Optional[str] = None
-    section: Optional[str] = None
 
     @classmethod
     def from_dict(cls, response: dict[Any, Any]) -> 'ProcessedArticle':
@@ -79,8 +79,8 @@ class ProcessedArticle:
             one_line_summary=response['one_line_summary'],
             full_summary=response['full_summary'],
             language=response['language'],
+            section=response['section'],
             region=response.get('region'),
-            section=response.get('section'),
         )
 
 
@@ -434,9 +434,9 @@ class ArticleSummarizer:
             title=ai_response.title,
             one_line_summary=ai_response.one_line_summary,
             full_summary=ai_response.full_summary,
-            language="ko",
-            region=None,
+            language="ko",  # TODO: Determine language dynamically if needed
             section=ai_response.section,
+            region=None,  # TODO: Find a good way to determine region
         )
 
         # Save to database in a single transaction
