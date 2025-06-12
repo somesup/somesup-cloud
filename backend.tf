@@ -1,6 +1,6 @@
 resource "google_storage_bucket" "tf_state" {
   project  = var.project
-  name     = "somesup-tfstate"
+  name     = "${var.project}-tfstate"
   location = var.region
 
   force_destroy               = false
