@@ -37,3 +37,13 @@ resource "google_project_service" "cloud_tasks" {
   project = var.project
   service = "cloudtasks.googleapis.com"
 }
+
+resource "google_project_service" "api_gateway" {
+  project = var.project
+  service = "apigateway.googleapis.com"
+}
+
+resource "google_project_service" "service_control" {
+  project = var.project
+  service = "servicecontrol.googleapis.com"
+}
