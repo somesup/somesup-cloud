@@ -39,3 +39,62 @@ CREATE TABLE somesup.article (
   FOREIGN KEY (provider_id) REFERENCES article_provider(id) ON DELETE CASCADE,
   FOREIGN KEY (processed_id) REFERENCES processed_article(id) ON DELETE SET NULL
 );
+
+CREATE TABLE somesup.keyword (
+  id      INT         NOT NULL AUTO_INCREMENT,
+  keyword VARCHAR(50) NOT NULL,
+
+  PRIMARY KEY (id),
+  UNIQUE (keyword)
+);
+
+CREATE TABLE somesup.keyword_article_mapping (
+  p_article_id  INT NOT NULL,
+  keyword_id    INT NOT NULL,
+
+  FOREIGN KEY (p_article_id) REFERENCES processed_article(id) ON DELETE CASCADE,
+  FOREIGN KEY (keyword_id) REFERENCES keyword(id) ON DELETE CASCADE
+);
+
+CREATE TABLE somesup.user (
+  id                INT           NOT NULL AUTO_INCREMENT,
+  nickname          VARCHAR(255)  NOT NULL,
+  phone             VARCHAR(255)  NOT NULL,
+  is_authenticated  BOOLEAN       NOT NULL DEFAULT FALSE,
+
+  PRIMARY KEY (id),
+  UNIQUE (nickname),
+  UNIQUE (phone)
+);
+
+CREATE TABLE somesup.refresh_token (
+  id          INT           NOT NULL AUTO_INCREMENT,
+  user_id     INT           NOT NULL,
+  token       VARCHAR(255)  NOT NULL,
+  expires_at  DATETIME      NOT NULL,
+  created_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  revoked_at  DATETIME      NULL,
+  is_revoked  BOOLEAN       NOT NULL DEFAULT FALSE,
+
+  PRIMARY KEY (id),
+
+  FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
+);
+
+CREATE TABLE somesup.like (
+  p_article_id  INT       NOT NULL,
+  user_id       INT       NOT NULL,
+  liked_at      DATETIME  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY (p_article_id) REFERENCES processed_article(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
+);
+
+CREATE TABLE somesup.scrap (
+  p_article_id  INT NOT NULL,
+  user_id       INT NOT NULL,
+  scrapped_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  FOREIGN KEY (p_article_id) REFERENCES processed_article(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
+);
