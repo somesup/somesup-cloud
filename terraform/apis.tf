@@ -47,3 +47,8 @@ resource "google_project_service" "service_control" {
   project = var.project
   service = "servicecontrol.googleapis.com"
 }
+
+resource "google_project_service" "resource_manager" {
+  project = var.project
+  service = "cloudresourcemanager.googleapis.com"
+}

@@ -6,10 +6,8 @@ resource "google_sql_database_instance" "mysql" {
   deletion_protection = false
 
   settings {
-    tier              = "db-f1-micro"
-    disk_type         = "PD_HDD"
-    disk_size         = 10
-    availability_type = "ZONAL"
+    tier      = "db-f1-micro"
+    disk_size = 10
 
     ip_configuration {
       ipv4_enabled = true
@@ -33,11 +31,49 @@ data "google_secret_manager_secret_version" "mysql_admin_password" {
   version = "latest"
 }
 
+data "google_secret_manager_secret_version" "mysql_fetcher_username" {
+  project = var.project
+  secret  = "MYSQL_FETCHER_USERNAME"
+  version = "latest"
+}
+
+data "google_secret_manager_secret_version" "mysql_fetcher_password" {
+  project = var.project
+  secret  = "MYSQL_FETCHER_PASSWORD"
+  version = "latest"
+}
+
+data "google_secret_manager_secret_version" "mysql_summarizer_username" {
+  project = var.project
+  secret  = "MYSQL_SUMMARIZER_USERNAME"
+  version = "latest"
+}
+
+data "google_secret_manager_secret_version" "mysql_summarizer_password" {
+  project = var.project
+  secret  = "MYSQL_SUMMARIZER_PASSWORD"
+  version = "latest"
+}
+
 resource "google_sql_user" "admin" {
   project  = var.project
   instance = google_sql_database_instance.mysql.name
   name     = data.google_secret_manager_secret_version.mysql_admin_username.secret_data
   password = data.google_secret_manager_secret_version.mysql_admin_password.secret_data
+}
+
+resource "google_sql_user" "fetcher" {
+  project  = var.project
+  instance = google_sql_database_instance.mysql.name
+  name     = data.google_secret_manager_secret_version.mysql_fetcher_username.secret_data
+  password = data.google_secret_manager_secret_version.mysql_fetcher_password.secret_data
+}
+
+resource "google_sql_user" "summarizer" {
+  project  = var.project
+  instance = google_sql_database_instance.mysql.name
+  name     = data.google_secret_manager_secret_version.mysql_summarizer_username.secret_data
+  password = data.google_secret_manager_secret_version.mysql_summarizer_password.secret_data
 }
 
 # NOTE: There are SQL codes that configures schema in src/sql.
