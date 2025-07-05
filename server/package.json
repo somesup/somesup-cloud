@@ -5,8 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon main.ts",
-    "build": "tsc",
-    "start": "node main.js"
+    "init_db": "npx prisma migrate deploy && npx prisma generate"
   },
   "dependencies": {
     "express": "^4.21.0",
