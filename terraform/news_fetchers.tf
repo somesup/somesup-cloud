@@ -3,16 +3,6 @@ data "google_secret_manager_secret_version" "guardian_api" {
   secret  = "GUARDIAN_API_KEY"
 }
 
-data "google_secret_manager_secret_version" "mysql_fetcher_username" {
-  project = var.project
-  secret  = "MYSQL_FETCHER_USERNAME"
-}
-
-data "google_secret_manager_secret_version" "mysql_fetcher_password" {
-  project = var.project
-  secret  = "MYSQL_FETCHER_PASSWORD"
-}
-
 module "guardian_fetcher" {
   source = "./module/cloud_function"
 

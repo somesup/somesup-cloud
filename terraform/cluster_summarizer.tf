@@ -1,13 +1,3 @@
-data "google_secret_manager_secret_version" "mysql_summarizer_username" {
-  project = var.project
-  secret  = "MYSQL_SUMMARIZER_USERNAME"
-}
-
-data "google_secret_manager_secret_version" "mysql_summarizer_password" {
-  project = var.project
-  secret  = "MYSQL_SUMMARIZER_PASSWORD"
-}
-
 module "cluster_summarizer" {
   source = "./module/cloud_function"
 
