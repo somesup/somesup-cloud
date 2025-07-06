@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon main.ts",
+    "test": "jest",
     "init_db": "npx prisma migrate deploy && npx prisma generate"
   },
   "dependencies": {
@@ -15,11 +16,14 @@
     "@prisma/client": "^5.20.0",
     "@tsconfig/node20": "^20.1.4",
     "@types/express": "^4.17.21",
+    "@types/jest": "^30.0.0",
     "@types/node": "^22.7.4",
     "dotenv": "^16.4.5",
+    "node-mocks-http": "^1.17.2",
     "nodemon": "^3.1.10",
     "prettier": "^3.3.3",
     "prisma": "^5.20.0",
+    "ts-jest": "^29.4.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.6.2"
   }
