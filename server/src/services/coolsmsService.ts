@@ -6,13 +6,9 @@ import { COOLSMS_FROM_PHONE_NUMBER, solapiService } from '../config/coolSms'
  * @param {string} phoneNumber - 수신자 휴대폰 번호
  * @param {number} code - 발송할 인증번호
  * @returns {Promise<void>}
- * @throws {Error} 필수 파라미터가 없거나, 발송 실패 시 에러 발생
+ * @throws {Error} SMS 발송 실패 시 에러 발생
  */
 export const sendSMSVerificationCode = async (phoneNumber: string, code: number): Promise<void> => {
-  if (!phoneNumber || !code) {
-    throw new Error('Phone number and code are required')
-  }
-
   const message = {
     to: phoneNumber,
     from: COOLSMS_FROM_PHONE_NUMBER,

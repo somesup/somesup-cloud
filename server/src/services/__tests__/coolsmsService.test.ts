@@ -43,14 +43,6 @@ describe('sendSMSVerificationCode', () => {
     })
   })
 
-  it('should throw error when phone number is missing', async () => {
-    await expect(sendSMSVerificationCode('', 123456)).rejects.toThrow('Phone number and code are required')
-  })
-
-  it('should throw error when code is missing', async () => {
-    await expect(sendSMSVerificationCode('01087654321', 0)).rejects.toThrow('Phone number and code are required')
-  })
-
   it('should throw error when solapiService.sendOne fails', async () => {
     const phoneNumber = '01087654321'
     const code = 123456
