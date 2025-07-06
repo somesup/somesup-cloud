@@ -1,4 +1,4 @@
-import { sendSuccess, sendError } from './response'
+import { sendSuccess, sendError } from '../response'
 import { createResponse } from 'node-mocks-http'
 
 describe('sendSuccess', () => {
