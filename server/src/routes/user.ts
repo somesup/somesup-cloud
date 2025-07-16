@@ -4,6 +4,6 @@ import { updateNickname } from '../controllers/userController'
 
 const router = Router()
 
-router.put('/nickname', authenticateJWT, updateNickname)
+router.put('/me/nickname', authenticateJWT, updateNickname)
 
 export default router
