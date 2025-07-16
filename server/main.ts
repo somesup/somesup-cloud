@@ -1,13 +1,13 @@
-import Express from 'express'
 import dotenv from 'dotenv'
+dotenv.config()
+
+import Express from 'express'
 
 import { redisClient } from './src/config/redis'
 
 import articleRouter from './src/routes/article'
 import authRouter from './src/routes/auth'
 import userRouter from './src/routes/user'
-
-dotenv.config()
 
 redisClient.connect()
 
