@@ -77,6 +77,7 @@ CREATE TABLE `refresh_token` (
     `revoked_at` DATETIME(3) NULL,
     `is_revoked` BOOLEAN NOT NULL DEFAULT false,
 
+    UNIQUE INDEX `refresh_token_user_id_key`(`user_id`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
