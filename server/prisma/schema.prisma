@@ -80,7 +80,7 @@ model User {
   phone            String   @unique
   is_authenticated Boolean  @default(false)
   created_at       DateTime @default(now())
-  updated_at       DateTime @updatedAt
+  updated_at       DateTime @default(now()) @updatedAt
 
   refreshTokens RefreshToken?
   likes         Like[]
