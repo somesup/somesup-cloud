@@ -75,12 +75,14 @@ model KeywordArticleMapping {
 }
 
 model User {
-  id               Int     @id @default(autoincrement())
-  nickname         String  @unique
-  phone            String  @unique
-  is_authenticated Boolean @default(false)
+  id               Int      @id @default(autoincrement())
+  nickname         String   @unique
+  phone            String   @unique
+  is_authenticated Boolean  @default(false)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
 
-  refreshTokens RefreshToken[]
+  refreshTokens RefreshToken?
   likes         Like[]
   scraps        Scrap[]
 
@@ -89,7 +91,7 @@ model User {
 
 model RefreshToken {
   id         Int       @id @default(autoincrement())
-  user_id    Int
+  user_id    Int       @unique
   token      String
   expires_at DateTime
   created_at DateTime  @default(now())
