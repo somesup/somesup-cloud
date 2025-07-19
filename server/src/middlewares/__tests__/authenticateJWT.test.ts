@@ -1,5 +1,5 @@
 import { authenticateJWT, AuthenticatedRequest } from '../authenticateJWT'
-import { sendError } from '../../utils/response'
+import { errors } from '../../utils/response'
 import jwt from 'jsonwebtoken'
 
 jest.mock('../../utils/response')
@@ -23,11 +23,9 @@ describe('authenticateJWT middleware', () => {
     const req = { headers: {} } as AuthenticatedRequest
     const res = mockRes()
 
-    ;(sendError as jest.Mock).mockReturnValue(res)
-
     authenticateJWT(req, res, mockNext)
 
-    expect(sendError).toHaveBeenCalledWith(res, 'Access token is required', 401)
+    expect(errors.unauthorized).toHaveBeenCalledWith(res, 'Access token is required')
     expect(mockNext).not.toHaveBeenCalled()
   })
 
@@ -37,11 +35,9 @@ describe('authenticateJWT middleware', () => {
     } as AuthenticatedRequest
     const res = mockRes()
 
-    ;(sendError as jest.Mock).mockReturnValue(res)
-
     authenticateJWT(req, res, mockNext)
 
-    expect(sendError).toHaveBeenCalledWith(res, 'Access token is required', 401)
+    expect(errors.unauthorized).toHaveBeenCalledWith(res, 'Access token is required')
     expect(mockNext).not.toHaveBeenCalled()
   })
 
@@ -77,7 +73,7 @@ describe('authenticateJWT middleware', () => {
 
     authenticateJWT(req, res, mockNext)
 
-    expect(sendError).toHaveBeenCalledWith(res, 'Invalid or expired access token', 401)
+    expect(errors.unauthorized).toHaveBeenCalledWith(res, 'Invalid or expired access token')
     expect(mockNext).not.toHaveBeenCalled()
   })
 })

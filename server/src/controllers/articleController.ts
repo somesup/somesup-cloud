@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import { prisma } from '../../prisma/prisma'
-import { sendError, sendSuccess } from '../utils/response'
+import { errors, success, successWithOffset } from '../utils/response'
 
 /**
  * 기사 목록을 페이지네이션과 함께 조회합니다.
@@ -21,13 +21,18 @@ export const getArticles = async (req: Request, res: Response) => {
     const totalCount = await prisma.processedArticle.count()
 
     if (articles.length === 0) {
-      return sendError(res, 'No articles found', 404)
+      return errors.notFound(res, 'No articles found')
     }
 
-    return sendSuccess(res, articles, { page, limit, total: totalCount })
+    return successWithOffset(res, articles, {
+      page,
+      limit,
+      total: totalCount,
+      message: 'Articles retrieved successfully',
+    })
   } catch (error) {
     console.error(error)
-    return sendError(res, 'Internal server error', 500)
+    return errors.internal(res)
   }
 }
 
@@ -43,12 +48,14 @@ export const getArticleById = async (req: Request, res: Response) => {
     })
 
     if (!article) {
-      return sendError(res, 'Article not found', 404)
+      return errors.notFound(res)
     }
 
-    sendSuccess(res, article)
+    return success(res, article, {
+      message: 'Article retrieved successfully',
+    })
   } catch (error) {
     console.error(error)
-    return sendError(res, 'Internal server error', 500)
+    return errors.internal(res)
   }
 }

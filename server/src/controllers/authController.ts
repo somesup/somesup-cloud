@@ -1,5 +1,5 @@
 import { Request, Response } from 'express'
-import { sendError, sendSuccess } from '../utils/response'
+import { errors, success } from '../utils/response'
 import { authService, CodeDoesnotExistError, RefreshTokenNotFoundError } from '../services/authService'
 import { userService } from '../services/userService'
 import { generateRandomNickname } from '../utils/nickname'
@@ -23,14 +23,16 @@ export const requestPhoneAuth = async (req: Request, res: Response) => {
   const { phoneNumber } = req.body
 
   if (!phoneNumber) {
-    return sendError(res, 'Phone number is required', 400)
+    return errors.badRequest(res, 'Phone number is required')
   }
 
   try {
     authService.sendVerificationCode(phoneNumber)
-    return sendSuccess(res, 'Verification code sent successfully')
+    return success(res, null, {
+      message: 'Verification code sent successfully',
+    })
   } catch (error) {
-    return sendError(res, 'Internal server error', 500)
+    return errors.internal(res)
   }
 }
 
@@ -55,13 +57,13 @@ export const verifyPhoneAuth = async (req: Request, res: Response) => {
   const { phoneNumber, code } = req.body
 
   if (!phoneNumber || !code) {
-    return sendError(res, 'Phone number and code are required', 400)
+    return errors.badRequest(res, 'Phone number and verification code are required')
   }
 
   try {
     const isValidCode = await authService.verifyPhoneCode(phoneNumber, code)
     if (!isValidCode) {
-      return sendError(res, 'Invalid verification code', 400)
+      return errors.badRequest(res, 'Invalid verification code')
     }
 
     let user = await userService.findUserByPhone(phoneNumber)
@@ -81,12 +83,14 @@ export const verifyPhoneAuth = async (req: Request, res: Response) => {
       tokens,
     }
 
-    return sendSuccess(res, userData)
+    return success(res, userData, {
+      message: 'Phone verification successful',
+    })
   } catch (error) {
     if (error instanceof CodeDoesnotExistError) {
-      return sendError(res, 'Verification code does not exist or has expired', 400)
+      return errors.badRequest(res, 'Verification code does not exist or has expired')
     }
-    return sendError(res, 'Internal server error', 500)
+    return errors.internal(res)
   }
 }
 
@@ -107,32 +111,34 @@ export const verifyPhoneAuth = async (req: Request, res: Response) => {
 export const refreshAccessToken = async (req: Request, res: Response) => {
   const { refreshToken } = req.body
   if (!refreshToken) {
-    return sendError(res, 'Refresh token is required', 400)
+    return errors.badRequest(res, 'Refresh token is required')
   }
 
   try {
     const decoded = verifyRefreshToken(refreshToken)
     const dbToken = await authService.getRefreshTokenByUserId(decoded.userId)
     if (!dbToken) {
-      return sendError(res, 'Refresh token not found', 401)
+      return errors.unauthorized(res, 'Refresh token not found')
     }
 
     if (dbToken !== refreshToken) {
-      return sendError(res, 'Invalid refresh token', 401)
+      return errors.unauthorized(res, 'Invalid refresh token')
     }
 
     const user = await userService.findUserById(decoded.userId)
     if (!user) {
-      return sendError(res, 'User not found', 404)
+      return errors.notFound(res, 'User not found')
     }
 
     const tokens = await authService.generateTokens(user.id)
 
-    return sendSuccess(res, tokens)
+    return success(res, tokens, {
+      message: 'Access token refreshed successfully',
+    })
   } catch (error) {
     if (error instanceof RefreshTokenNotFoundError) {
-      return sendError(res, 'Refresh token not found for the user', 401)
+      return errors.unauthorized(res, 'Refresh token not found for the user')
     }
-    return sendError(res, 'Invalid refresh token', 401)
+    return errors.unauthorized(res, 'Invalid refresh token')
   }
 }
