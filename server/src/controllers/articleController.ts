@@ -1,61 +1,76 @@
 import { Request, Response } from 'express'
-import { prisma } from '../../prisma/prisma'
-import { errors, success, successWithOffset } from '../utils/response'
+import { errors, success, successWithCursor } from '../utils/response'
+import { ArticleCursorPaginationResult, ArticleNotFoundError, articleService } from '../services/articleService'
 
 /**
- * 기사 목록을 페이지네이션과 함께 조회합니다.
+ * Cursor 기반 페이지네이션을 사용하여 기사 목록을 가져오는 컨트롤러입니다.
+ * 사용자가 요청한 limit와 cursor를 기반으로 기사를 조회합니다.
+ * @param {Request} req - Express 요청 객체. 쿼리 파라미터로 limit와 cursor가 포함되어야 합니다.
+ * @param {Response} res - Express 응답 객체.
+ * @example
+ * // 요청 예시
+ * GET /api/articles?limit=10&cursor=eyJjcmVhdGVkQXQiOiIyMDIzLTA5LTIxVDEyOjAwOjAwLjAwMFoiLCJpZCI6MX0=
+ * * // 응답 예시
+ * {
+ *  "data": [
+ *    {
+ *    "id": 1,
+ *    ...나머지 기사 데이터...
+ *    }
+ *  ],
+ *  "pagination": {
+ *    "hasNext": true,
+ *    "nextCursor": "eyJjcmVhdGVkQXQiOiIyMDIzLTA5LTIxVDEyOjAwOjAwLjAwMFoiLCJpZCI6Mn0="
+ *  }
+ * }
  */
 export const getArticles = async (req: Request, res: Response) => {
-  const page = req.query.page ? parseInt(req.query.page as string, 10) : 1
   const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 10
+  const cursor = req.query.cursor as string
 
   try {
-    const articles = await prisma.processedArticle.findMany({
-      skip: (page - 1) * limit,
-      take: limit,
-      orderBy: {
-        created_at: 'desc',
-      },
-    })
-
-    const totalCount = await prisma.processedArticle.count()
-
-    if (articles.length === 0) {
-      return errors.notFound(res, 'No articles found')
-    }
-
-    return successWithOffset(res, articles, {
-      page,
+    const { data, hasNext, nextCursor }: ArticleCursorPaginationResult = await articleService.getArticlesByCursor(
       limit,
-      total: totalCount,
-      message: 'Articles retrieved successfully',
+      cursor,
+    )
+    return successWithCursor(res, data, {
+      hasNext: hasNext,
+      nextCursor: nextCursor,
     })
   } catch (error) {
-    console.error(error)
+    console.error('Error fetching articles:', error)
     return errors.internal(res)
   }
 }
 
 /**
- * 특정 ID의 기사를 조회합니다.
+ * 특정 ID의 기사를 조회하는 컨트롤러입니다.
+ * 사용자가 요청한 ID에 해당하는 기사를 데이터베이스에서 조회합니다.
+ * @param {Request} req - Express 요청 객체. URL 파라미터로 id가 포함되어야 합니다.
+ * @param {Response} res - Express 응답 객체.
+ * @example
+ * // 요청 예시
+ * GET /api/articles/1
+ * // 응답 예시
+ * {
+ *   "data": {
+ *     "id": 1,
+ *     ...나머지 기사 데이터...
+ *   }
+ * }
  */
 export const getArticleById = async (req: Request, res: Response) => {
   const id = parseInt(req.params.id, 10)
 
   try {
-    const article = await prisma.processedArticle.findUnique({
-      where: { id },
-    })
-
-    if (!article) {
-      return errors.notFound(res)
-    }
-
+    const article = await articleService.getArticleById(id)
     return success(res, article, {
       message: 'Article retrieved successfully',
     })
   } catch (error) {
-    console.error(error)
+    if (error instanceof ArticleNotFoundError) {
+      return errors.notFound(res, 'Article not found')
+    }
     return errors.internal(res)
   }
 }
