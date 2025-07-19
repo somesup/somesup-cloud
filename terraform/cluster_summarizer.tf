@@ -12,7 +12,7 @@ module "cluster_summarizer" {
   max_instance_count  = 20
   environment_variables = {
     PROJECT_ID                = var.project
-    VERTEX_AI_REGION          = "us-central1" # Gemini 2.5 is only available in us-central1
+    VERTEX_AI_REGION          = "global"
     INSTANCE_CONNECTION_NAME  = google_sql_database_instance.mysql.connection_name
     MYSQL_SUMMARIZER_USERNAME = data.google_secret_manager_secret_version.mysql_summarizer_username.secret_data
     MYSQL_SUMMARIZER_PASSWORD = data.google_secret_manager_secret_version.mysql_summarizer_password.secret_data

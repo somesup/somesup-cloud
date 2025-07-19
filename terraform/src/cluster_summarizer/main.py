@@ -290,7 +290,7 @@ class VertexAiClient:
     """Client for interacting with Vertex AI for content generation."""
 
     # Constants for better maintainability
-    MODEL_NAME = "google/gemini-2.5-pro-preview-05-06"
+    MODEL_NAME = "google/gemini-2.5-pro"
     VALID_SECTIONS = [
         "politics", "economy", "society", "culture", "tech", "world"
     ]
