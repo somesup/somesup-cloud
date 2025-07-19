@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken'
 import { JWT_SECRET } from '../config/jwt'
-import { sendError } from '../utils/response'
+import { errors } from '../utils/response'
 import { Request, Response, NextFunction } from 'express'
 
 /**
@@ -50,7 +50,7 @@ export const authenticateJWT = (req: AuthenticatedRequest, res: Response, next: 
   const token = req.headers.authorization?.split(' ')[1]
 
   if (!token) {
-    return sendError(res, 'Access token is required', 401)
+    return errors.unauthorized(res, 'Access token is required')
   }
 
   try {
@@ -58,6 +58,6 @@ export const authenticateJWT = (req: AuthenticatedRequest, res: Response, next: 
     req.userId = decodedJwtPayload.userId
     next()
   } catch (error) {
-    return sendError(res, 'Invalid or expired access token', 401)
+    return errors.unauthorized(res, 'Invalid or expired access token')
   }
 }

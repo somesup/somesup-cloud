@@ -1,5 +1,5 @@
 import { updateNickname } from '../userController'
-import { sendError, sendSuccess } from '../../utils/response'
+import { errors, success } from '../../utils/response'
 import { userService } from '../../services/userService'
 import { AuthenticatedRequest } from '../../middlewares/authenticateJWT'
 import { Response } from 'express'
@@ -29,7 +29,7 @@ describe('updateNickname', () => {
 
     await updateNickname(req, res)
 
-    expect(sendError).toHaveBeenCalledWith(res, 'User ID is required', 401)
+    expect(errors.unauthorized).toHaveBeenCalledWith(res, 'User ID is required')
   })
 
   it('should return 400 if nickname is missing', async () => {
@@ -41,8 +41,7 @@ describe('updateNickname', () => {
 
     await updateNickname(req, res)
 
-    expect(res.status).toHaveBeenCalledWith(400)
-    expect(res.json).toHaveBeenCalledWith({ error: 'Nickname is required' })
+    expect(errors.badRequest).toHaveBeenCalledWith(res, 'Nickname is required')
   })
 
   it('should return 400 if nickname already exists', async () => {
@@ -57,7 +56,7 @@ describe('updateNickname', () => {
     await updateNickname(req, res)
 
     expect(userService.checkNicknameExists).toHaveBeenCalledWith('existingNick')
-    expect(sendError).toHaveBeenCalledWith(res, 'Nickname already exists', 400)
+    expect(errors.conflict).toHaveBeenCalledWith(res, 'Nickname already exists')
   })
 
   it('should update nickname and return updated user', async () => {
@@ -84,7 +83,9 @@ describe('updateNickname', () => {
 
     expect(userService.checkNicknameExists).toHaveBeenCalledWith('newNick')
     expect(userService.updateUserNickname).toHaveBeenCalledWith(1, 'newNick')
-    expect(sendSuccess).toHaveBeenCalledWith(res, updatedUser)
+    expect(success).toHaveBeenCalledWith(res, updatedUser, {
+      message: 'Nickname updated successfully',
+    })
   })
 
   it('should return 500 on unexpected error', async () => {
@@ -100,6 +101,6 @@ describe('updateNickname', () => {
 
     await updateNickname(req, res)
 
-    expect(sendError).toHaveBeenCalledWith(res, 'Internal server error', 500)
+    expect(errors.internal).toHaveBeenCalledWith(res)
   })
 })

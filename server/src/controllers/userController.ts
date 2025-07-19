@@ -1,5 +1,5 @@
 import { Response } from 'express'
-import { sendError, sendSuccess } from '../utils/response'
+import { errors, success } from '../utils/response'
 import { AuthenticatedRequest } from '../middlewares/authenticateJWT'
 import { userService } from '../services/userService'
 
@@ -19,23 +19,25 @@ import { userService } from '../services/userService'
 export const updateNickname = async (req: AuthenticatedRequest, res: Response): Promise<Response> => {
   const userId = req.userId
   if (!userId) {
-    return sendError(res, 'User ID is required', 401)
+    return errors.unauthorized(res, 'User ID is required')
   }
 
   const { nickname } = req.body
   if (!nickname) {
-    return res.status(400).json({ error: 'Nickname is required' })
+    return errors.badRequest(res, 'Nickname is required')
   }
 
   try {
     const isDuplicated = await userService.checkNicknameExists(nickname)
     if (isDuplicated) {
-      return sendError(res, 'Nickname already exists', 400)
+      return errors.conflict(res, 'Nickname already exists')
     }
 
     const updatedUser = await userService.updateUserNickname(userId, nickname)
-    return sendSuccess(res, updatedUser)
+    return success(res, updatedUser, {
+      message: 'Nickname updated successfully',
+    })
   } catch (error) {
-    return sendError(res, 'Internal server error', 500)
+    return errors.internal(res)
   }
 }
