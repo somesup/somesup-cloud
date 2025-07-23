@@ -26,10 +26,11 @@ model ProcessedArticle {
   section          String?  @db.VarChar(30)
   created_at       DateTime @default(now())
 
-  articles Article[]
-  keywords KeywordArticleMapping[]
-  likes    Like[]
-  scraps   Scrap[]
+  articles  Article[]
+  keywords  KeywordArticleMapping[]
+  likes     Like[]
+  scraps    Scrap[]
+  ViewEvent ViewEvent[]
 
   @@map("processed_article")
 }
@@ -85,6 +86,7 @@ model User {
   refreshTokens RefreshToken?
   likes         Like[]
   scraps        Scrap[]
+  ViewEvent     ViewEvent[]
 
   @@map("user")
 }
@@ -125,4 +127,22 @@ model Scrap {
 
   @@id([p_article_id, user_id])
   @@map("scrap")
+}
+
+enum ViewEventType {
+  impression // 그냥 스크롤 노출
+  detail // 자세히 보기
+}
+
+model ViewEvent {
+  p_article_id Int
+  user_id      Int
+  event_type   ViewEventType
+  created_at   DateTime      @default(now())
+
+  processed_article ProcessedArticle @relation(fields: [p_article_id], references: [id], onDelete: Cascade)
+  user              User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@id([p_article_id, user_id, event_type])
+  @@map("view_event")
 }

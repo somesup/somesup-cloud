@@ -1,4 +1,4 @@
-import { ProcessedArticle } from '@prisma/client'
+import { ProcessedArticle, ViewEventType } from '@prisma/client'
 import { prismaMock } from '../../../prisma/mock'
 import { articleService, ArticleNotFoundError } from '../articleService'
 import { createCursor, decodeCursor } from '../../utils/cursor'
@@ -306,6 +306,24 @@ describe('ArticleService', () => {
 
       expect(articleError).not.toEqual(genericError)
       expect(articleError.name).not.toBe(genericError.name)
+    })
+  })
+
+  describe('recordViewEvent', () => {
+    it('should call prisma.viewEvent.create with correct params', async () => {
+      const userId = 10
+      const pArticleId = 20
+      const eventType = ViewEventType.detail
+
+      await articleService.recordViewEvent(userId, pArticleId, eventType)
+
+      expect(prismaMock.viewEvent.create).toHaveBeenCalledWith({
+        data: {
+          user_id: userId,
+          p_article_id: pArticleId,
+          event_type: eventType,
+        },
+      })
     })
   })
 })
