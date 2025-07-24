@@ -16,15 +16,24 @@ model ArticleProvider {
   @@map("article_provider")
 }
 
+enum SectionType {
+  politics // 정치
+  economy // 경제
+  society // 사회
+  culture // 문화
+  tech // IT/과학
+  world // 국제
+}
+
 model ProcessedArticle {
-  id               Int      @id @default(autoincrement())
+  id               Int         @id @default(autoincrement())
   title            String
-  one_line_summary String   @db.Text
-  full_summary     String   @db.Text
-  language         String   @db.VarChar(30)
-  region           String?  @db.VarChar(30)
-  section          String?  @db.VarChar(30)
-  created_at       DateTime @default(now())
+  one_line_summary String      @db.Text
+  full_summary     String      @db.Text
+  language         String      @db.VarChar(30)
+  region           String?     @db.VarChar(30)
+  section          SectionType
+  created_at       DateTime    @default(now())
 
   articles Article[]
   keywords KeywordArticleMapping[]
