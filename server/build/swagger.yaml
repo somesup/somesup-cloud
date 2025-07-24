@@ -23,19 +23,38 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SuccessMessageResponse'
+                $ref: '#/components/schemas/SuccessResponse'
+              examples:
+                success:
+                  summary: 인증코드 전송 성공
+                  value:
+                    success: true
+                    data: null
+                    message: Verification code sent successfully
         '400':
           description: 잘못된 요청 (phoneNumber 미입력)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidPhoneNumber:
+                  summary: 잘못된 휴대폰 번호
+                  value:
+                    success: false
+                    message: Phone number is required
         '500':
           description: 서버 오류
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                serverError:
+                  summary: 서버 오류
+                  value:
+                    success: false
+                    message: Internal server error
   /auth/phone/verify:
     post:
       summary: 휴대폰 인증 코드 검증 및 회원 가입/로그인
@@ -61,12 +80,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missingParameters:
+                  summary: 파라미터 누락
+                  value:
+                    success: false
+                    message: Phone number and code are required
+                invalidCode:
+                  summary: 잘못된 인증 코드
+                  value:
+                    success: false
+                    message: Invalid verification code
+                codeExpired:
+                  summary: 인증 코드 만료
+                  value:
+                    success: false
+                    message: Verification code has expired
         '500':
           description: 서버 오류
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                serverError:
+                  summary: 서버 오류
+                  value:
+                    success: false
+                    message: Internal server error
   /auth/refresh:
     post:
       summary: 액세스 토큰 갱신
@@ -90,24 +131,53 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missingRefreshToken:
+                  summary: 리프레시 토큰 누락
+                  value:
+                    success: false
+                    message: Refresh token is required
         '401':
-          description: 리프레시 토큰이 유효하지 않음
+          description: 리프레시 토큰이 유효하지 않거나 찾을 수 없음
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidRefreshToken:
+                  summary: 유효하지 않은 리프레시 토큰
+                  value:
+                    success: false
+                    message: Invalid refresh token
+                refreshTokenNotFound:
+                  summary: 리프레시 토큰을 찾을 수 없음
+                  value:
+                    success: false
+                    message: Refresh token not found for the user
         '404':
           description: 사용자 정보 없음
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                userNotFound:
+                  summary: 사용자 정보 없음
+                  value:
+                    success: false
+                    message: User not found
         '500':
           description: 서버 오류
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                serverError:
+                  summary: 서버 오류
+                  value:
+                    success: false
+                    message: Internal server error
   /articles:
     get:
       summary: 기사 목록 조회 (Cursor 기반 페이지네이션)
@@ -137,6 +207,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                serverError:
+                  summary: 서버 오류
+                  value:
+                    success: false
+                    message: Internal server error
   '/articles/{id}':
     get:
       summary: 특정 기사 조회
@@ -161,12 +237,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                articleNotFound:
+                  summary: 기사를 찾을 수 없음
+                  value:
+                    success: false
+                    message: Article not found
         '500':
           description: 서버 오류
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                serverError:
+                  summary: 서버 오류
+                  value:
+                    success: false
+                    message: Internal server error
 components:
   schemas:
     PhoneRequest:
@@ -201,19 +289,6 @@ components:
           type: string
           description: 리프레시 토큰
           example: your_refresh_token_here
-    SuccessMessageResponse:
-      type: object
-      properties:
-        success:
-          type: boolean
-          example: true
-        data:
-          type: 'null'
-          nullable: true
-          example: null
-        message:
-          type: string
-          example: Verification code sent successfully
     PhoneVerifySuccessResponse:
       type: object
       properties:
@@ -241,6 +316,19 @@ components:
         message:
           type: string
           example: Access token refreshed successfully
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: 'null'
+          nullable: true
+          example: null
+        message:
+          type: string
+          example: Verification code sent successfully
     ErrorResponse:
       type: object
       properties:
@@ -249,13 +337,12 @@ components:
           example: false
         message:
           type: string
-          example: Invalid verification code
+          example: Internal server error
         code:
           type: string
           nullable: true
-          example: BAD_REQUEST
         details:
-          type: object
+          type: string
           nullable: true
     User:
       type: object
