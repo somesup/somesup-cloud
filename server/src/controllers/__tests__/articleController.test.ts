@@ -1,5 +1,5 @@
 import { getArticles, getArticleById } from '../articleController'
-import { articleService } from '../../services/articleService'
+import { ArticleNotFoundError, articleService } from '../../services/articleService'
 import { successWithCursor, success, errors } from '../../utils/response'
 
 jest.mock('../../services/articleService')
@@ -94,6 +94,16 @@ describe('articleController', () => {
 
       expect(articleService.getArticleById).toHaveBeenCalledWith(3)
       expect(mockSuccess).toHaveBeenCalled()
+    })
+
+    it('should respond with not found if article does not exist', async () => {
+      req.params.id = '100'
+      ;(articleService.getArticleById as jest.Mock).mockRejectedValue(new ArticleNotFoundError('Article not found'))
+
+      await getArticleById(req, res)
+
+      expect(mockSuccess).not.toHaveBeenCalled()
+      expect(errors.notFound).toHaveBeenCalledWith(res, 'Article not found')
     })
 
     it('should respond with internal error on service exception', async () => {

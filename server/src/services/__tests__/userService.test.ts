@@ -100,4 +100,21 @@ describe('userService', () => {
       expect(result).toEqual(updatedUser)
     })
   })
+
+  describe('updateUserInfo', () => {
+    it('should update user info and return updated user', async () => {
+      const updateData = { nickname: '새로운 닉네임' }
+      const updatedUser = { ...mockUser, nickname: '새로운 닉네임' }
+
+      ;(prismaMock.user.update as jest.Mock).mockResolvedValue(updatedUser)
+
+      const result = await userService.updateUserInfo(1, updateData)
+
+      expect(prismaMock.user.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: updateData,
+      })
+      expect(result).toEqual(updatedUser)
+    })
+  })
 })

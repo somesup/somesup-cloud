@@ -1,9 +1,12 @@
 import { Router } from 'express'
 import { authenticateJWT } from '../middlewares/authenticateJWT'
-import { updateNickname } from '../controllers/userController'
+import { updateNickname, updateUser } from '../controllers/userController'
 
 const router = Router()
 
-router.put('/me/nickname', authenticateJWT, updateNickname)
+/**
+ * 사용자 닉네임 업데이트
+ */
+router.patch('/', authenticateJWT, updateUser)
 
 export default router

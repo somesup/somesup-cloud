@@ -20,7 +20,8 @@
     "swagger-cli": "^4.0.4",
     "swagger-ui-express": "^5.0.1",
     "tsconfig": "^7.0.0",
-    "yamljs": "^0.3.0"
+    "yamljs": "^0.3.0",
+    "zod": "^4.0.10"
   },
   "devDependencies": {
     "@prisma/client": "^5.20.0",

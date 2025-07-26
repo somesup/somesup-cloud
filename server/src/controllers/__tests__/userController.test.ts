@@ -1,4 +1,4 @@
-import { updateNickname } from '../userController'
+import { updateNickname, updateUser } from '../userController'
 import { errors, success } from '../../utils/response'
 import { userService } from '../../services/userService'
 import { AuthenticatedRequest } from '../../middlewares/authenticateJWT'
@@ -102,5 +102,61 @@ describe('updateNickname', () => {
     await updateNickname(req, res)
 
     expect(errors.internal).toHaveBeenCalledWith(res)
+  })
+})
+
+describe('updateUser', () => {
+  it('should return 401 if userId is missing', async () => {
+    const req = {
+      userId: undefined,
+      body: { nickname: '새로운 닉네임' },
+    } as unknown as AuthenticatedRequest
+
+    const res = mockRes()
+
+    await updateUser(req, res)
+
+    expect(errors.unauthorized).toHaveBeenCalledWith(res, 'User ID is required')
+  })
+
+  it('sould return 400 if request body is invalid', async () => {
+    const req = {
+      userId: 1,
+      body: { is_authenticated: true }, // Invalid field
+    } as unknown as AuthenticatedRequest
+
+    const res = mockRes()
+
+    await updateUser(req, res)
+
+    expect(errors.badRequest).toHaveBeenCalledWith(res, 'Invalid request body, possibly wrong field names')
+  })
+
+  it('should update user info and return updated user', async () => {
+    const updateData = { nickname: '새로운 닉네임' }
+    const updatedUser = {
+      id: 1,
+      ...updateData,
+      phone: '01012345678',
+      is_authenticated: true,
+      created_at: new Date(),
+      updated_at: new Date(),
+    }
+
+    ;(userService.updateUserInfo as jest.Mock).mockResolvedValue(updatedUser)
+
+    const req = {
+      userId: 1,
+      body: updateData,
+    } as AuthenticatedRequest
+
+    const res = mockRes()
+
+    await updateUser(req, res)
+
+    expect(userService.updateUserInfo).toHaveBeenCalledWith(1, updateData)
+    expect(success).toHaveBeenCalledWith(res, updatedUser, {
+      message: 'User information updated successfully',
+    })
   })
 })
