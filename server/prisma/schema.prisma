@@ -25,20 +25,31 @@ enum SectionType {
   world // 국제
 }
 
+model ArticleSection {
+  id   Int         @id @default(autoincrement())
+  name SectionType @unique
+
+  p_articles ProcessedArticle[]
+
+  @@map("article_section")
+}
+
 model ProcessedArticle {
-  id               Int         @id @default(autoincrement())
+  id               Int      @id @default(autoincrement())
+  section_id       Int
   title            String
-  one_line_summary String      @db.Text
-  full_summary     String      @db.Text
-  language         String      @db.VarChar(30)
-  region           String?     @db.VarChar(30)
-  section          SectionType
-  created_at       DateTime    @default(now())
+  one_line_summary String   @db.Text
+  full_summary     String   @db.Text
+  language         String   @db.VarChar(30)
+  region           String?  @db.VarChar(30)
+  created_at       DateTime @default(now())
 
   articles Article[]
   keywords KeywordArticleMapping[]
   likes    Like[]
   scraps   Scrap[]
+
+  section ArticleSection @relation(fields: [section_id], references: [id], onDelete: Cascade)
 
   @@map("processed_article")
 }
@@ -51,7 +62,6 @@ model Article {
   content       String   @db.Text
   language      String   @db.VarChar(30)
   region        String?  @db.VarChar(30)
-  section       String?  @db.VarChar(30)
   thumbnail_url String
   news_url      String
   is_processed  Boolean  @default(false)
