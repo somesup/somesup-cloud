@@ -79,7 +79,6 @@ class Article:
         lang: Language code of the article (e.g., 'en' for English).
         image: URL of the article's thumbnail or featured image.
         url: Direct URL link to the original article.
-        section: The section/category of the article (e.g., 'world', 'politics').
     """
 
     title: str
@@ -87,7 +86,6 @@ class Article:
     lang: str
     image: str
     url: str
-    section: str
 
     @classmethod
     def from_api_response(cls, article: dict[str, Any]) -> 'Article':
@@ -95,7 +93,7 @@ class Article:
         
         Args:
             article: Dictionary containing article data from the Guardian API response.
-                Expected to contain keys like 'webUrl', 'sectionId', and nested 'fields'
+                Expected to contain keys like 'webUrl', and nested 'fields'
                 dictionary with 'headline', 'bodyText', 'lang', 'thumbnail'.
         
         Returns:
@@ -106,8 +104,7 @@ class Article:
                    body=fields.get('bodyText', ''),
                    lang=fields.get('lang', 'en'),
                    image=fields.get('thumbnail', ''),
-                   url=article.get('webUrl', ''),
-                   section=article.get('sectionId', ''))
+                   url=article.get('webUrl', ''))
 
 
 class GuardianApiClient:
@@ -158,7 +155,6 @@ class GuardianApiClient:
             'from-date': from_date.isoformat(),
             'to-date': to_date.isoformat(),
             'show-fields': 'headline,thumbnail,bodyText,lang,lastModified',
-            'section': 'world',
             'page-size': num_articles,
         }
 
@@ -332,13 +328,12 @@ class DatabaseClient:
             with conn.cursor() as cursor:
                 try:
                     cursor.execute(
-                        "INSERT INTO article (provider_id, title, content, language, section, thumbnail_url, news_url) "
-                        "VALUES (%s, %s, %s, %s, %s, %s, %s)", (
+                        "INSERT INTO article (provider_id, title, content, language, thumbnail_url, news_url) "
+                        "VALUES (%s, %s, %s, %s, %s, %s)", (
                             provider_id,
                             article.title,
                             article.body,
                             article.lang,
-                            article.section,
                             article.image,
                             article.url,
                         ))

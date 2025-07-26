@@ -167,6 +167,66 @@ class DatabaseClient:
             logger.error("Error fetching articles: %s", e)
             raise
 
+    def _get_section_id(
+        self,
+        connection: pymysql.connections.Connection,
+        section_name: str,
+    ) -> Optional[int]:
+        """Retrieve the ID of a section by its name.
+
+        Args:
+            connection: The database connection to use.
+            section_name: The name of the section to retrieve.
+        Returns:
+            The ID of the section if it exists, otherwise None.
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT id FROM article_section WHERE name = %s",
+                (section_name, ),
+            )
+            result = cursor.fetchone()
+            return result[0] if result else None
+
+    def _create_section(
+        self,
+        connection: pymysql.connections.Connection,
+        section_name: str,
+    ) -> int:
+        """Create a new section in the database and return its ID.
+        
+        Args:
+            connection: The database connection to use.
+            section_name: The name of the section to create.
+
+        Returns:
+            The ID of the newly created section.
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO article_section (name) VALUES (%s)",
+                (section_name, ),
+            )
+            connection.commit()
+            return cursor.lastrowid
+
+    def _get_or_create_section(self, section_name: str) -> int:
+        """Get the ID of a section or create it if it doesn't exist.
+
+        Args:
+            section_name: The name of the section to retrieve or create.
+
+        Returns:
+            The ID of the section.
+        """
+
+        with self._get_connection() as conn:
+            section_id = self._get_section_id(conn, section_name)
+            if section_id is not None:
+                return section_id
+
+            return self._create_section(conn, section_name)
+
     def save_processed_article_with_references(
             self, article: ProcessedArticle,
             articles: list[SimpleArticle]) -> int:
@@ -177,9 +237,11 @@ class DatabaseClient:
         try:
             with self._get_connection() as connection:
                 with connection.cursor() as cursor:
+                    section_id = self._get_or_create_section(article.section)
+
                     # Insert processed article
                     insert_sql = """
-                        INSERT INTO processed_article (title, one_line_summary, full_summary, language, region, section)
+                        INSERT INTO processed_article (title, one_line_summary, full_summary, language, region, section_id)
                         VALUES (%s, %s, %s, %s, %s, %s)
                     """
                     cursor.execute(insert_sql, (
@@ -188,7 +250,7 @@ class DatabaseClient:
                         article.full_summary,
                         article.language,
                         article.region,
-                        article.section,
+                        section_id,
                     ))
 
                     new_processed_id = cursor.lastrowid

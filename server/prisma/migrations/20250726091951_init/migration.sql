@@ -7,14 +7,23 @@ CREATE TABLE `article_provider` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
+CREATE TABLE `article_section` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `name` ENUM('politics', 'economy', 'society', 'culture', 'tech', 'world') NOT NULL,
+
+    UNIQUE INDEX `article_section_name_key`(`name`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
 CREATE TABLE `processed_article` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `section_id` INTEGER NOT NULL,
     `title` VARCHAR(191) NOT NULL,
     `one_line_summary` TEXT NOT NULL,
     `full_summary` TEXT NOT NULL,
     `language` VARCHAR(30) NOT NULL,
     `region` VARCHAR(30) NULL,
-    `section` VARCHAR(30) NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
     PRIMARY KEY (`id`)
@@ -29,7 +38,6 @@ CREATE TABLE `article` (
     `content` TEXT NOT NULL,
     `language` VARCHAR(30) NOT NULL,
     `region` VARCHAR(30) NULL,
-    `section` VARCHAR(30) NULL,
     `thumbnail_url` VARCHAR(191) NOT NULL,
     `news_url` VARCHAR(191) NOT NULL,
     `is_processed` BOOLEAN NOT NULL DEFAULT false,
@@ -61,6 +69,8 @@ CREATE TABLE `user` (
     `nickname` VARCHAR(191) NOT NULL,
     `phone` VARCHAR(191) NOT NULL,
     `is_authenticated` BOOLEAN NOT NULL DEFAULT false,
+    `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
     UNIQUE INDEX `user_nickname_key`(`nickname`),
     UNIQUE INDEX `user_phone_key`(`phone`),
@@ -98,6 +108,9 @@ CREATE TABLE `scrap` (
 
     PRIMARY KEY (`p_article_id`, `user_id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- AddForeignKey
+ALTER TABLE `processed_article` ADD CONSTRAINT `processed_article_section_id_fkey` FOREIGN KEY (`section_id`) REFERENCES `article_section`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `article` ADD CONSTRAINT `article_provider_id_fkey` FOREIGN KEY (`provider_id`) REFERENCES `article_provider`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
