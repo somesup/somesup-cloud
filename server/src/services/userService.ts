@@ -45,6 +45,7 @@ export const userService = {
 
   /**
    * 새로운 사용자를 생성합니다.
+   * 기본적으로 현재 존재하는 Section들에 대한 선호도를 Default 선호도로 설정합니다.
    *
    * @async
    * @param {string} phoneNumber - 생성할 사용자의 휴대폰 번호
@@ -53,13 +54,26 @@ export const userService = {
    * @returns {Promise<User>} 생성된 사용자 객체
    */
   createUser: async (phoneNumber: string, nickname: string, isAuthenticated: boolean): Promise<User> => {
+    // NOTE: 현재 존재하는 Section들에 대한 기본 선호도를 생성합니다.
+    const sections = await prisma.articleSection.findMany()
+    const defaultSectionPrefs = sections.map((section) => ({
+      section_id: section.id,
+    }))
+
     const user = await prisma.user.create({
       data: {
         phone: phoneNumber,
         nickname: nickname,
         is_authenticated: isAuthenticated,
+        user_article_section_preference: {
+          create: defaultSectionPrefs,
+        },
+      },
+      include: {
+        user_article_section_preference: true,
       },
     })
+
     return user
   },
 

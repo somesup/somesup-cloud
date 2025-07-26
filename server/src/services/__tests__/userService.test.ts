@@ -1,6 +1,6 @@
 import { UserNotFoundError, userService } from '../userService'
 import { prismaMock } from '../../../prisma/mock'
-import { User } from '@prisma/client'
+import { User, ArticleSection } from '@prisma/client'
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
 
 describe('userService', () => {
@@ -59,6 +59,7 @@ describe('userService', () => {
     it('should create and return new user', async () => {
       const createdUser = { ...mockUser, id: 2 }
       ;(prismaMock.user.create as jest.Mock).mockResolvedValue(createdUser)
+      ;(prismaMock.articleSection.findMany as jest.Mock).mockResolvedValue([])
 
       const result = await userService.createUser('01087654321', '새유저', true)
 
@@ -67,9 +68,42 @@ describe('userService', () => {
           phone: '01087654321',
           nickname: '새유저',
           is_authenticated: true,
+          user_article_section_preference: {
+            create: [],
+          },
+        },
+        include: {
+          user_article_section_preference: true,
         },
       })
       expect(result).toEqual(createdUser)
+    })
+
+    it('should create default section preferences for new user', async () => {
+      const sections = [
+        { id: 1, name: 'politics' },
+        { id: 2, name: 'economy' },
+      ]
+      ;(prismaMock.articleSection.findMany as jest.Mock).mockResolvedValue(sections)
+
+      const createdUser = { ...mockUser, id: 2 }
+      ;(prismaMock.user.create as jest.Mock).mockResolvedValue(createdUser)
+
+      await userService.createUser('01087654321', '새유저', true)
+
+      expect(prismaMock.user.create).toHaveBeenCalledWith({
+        data: {
+          phone: '01087654321',
+          nickname: '새유저',
+          is_authenticated: true,
+          user_article_section_preference: {
+            create: sections.map((section) => ({ section_id: section.id })),
+          },
+        },
+        include: {
+          user_article_section_preference: true,
+        },
+      })
     })
   })
 
