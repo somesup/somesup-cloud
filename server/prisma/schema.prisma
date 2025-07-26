@@ -29,7 +29,8 @@ model ArticleSection {
   id   Int         @id @default(autoincrement())
   name SectionType @unique
 
-  p_articles ProcessedArticle[]
+  p_articles                      ProcessedArticle[]
+  user_article_section_preference UserArticleSectionPreference[]
 
   @@map("article_section")
 }
@@ -101,9 +102,10 @@ model User {
   created_at       DateTime @default(now())
   updated_at       DateTime @default(now()) @updatedAt
 
-  refreshTokens RefreshToken?
-  likes         Like[]
-  scraps        Scrap[]
+  refreshTokens                   RefreshToken?
+  likes                           Like[]
+  scraps                          Scrap[]
+  user_article_section_preference UserArticleSectionPreference[]
 
   @@map("user")
 }
@@ -144,4 +146,16 @@ model Scrap {
 
   @@id([p_article_id, user_id])
   @@map("scrap")
+}
+
+model UserArticleSectionPreference {
+  user_id    Int
+  section_id Int
+  preference Int @default(1)
+
+  user    User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  section ArticleSection @relation(fields: [section_id], references: [id], onDelete: Cascade)
+
+  @@id([user_id, section_id])
+  @@map("user_article_section_preference")
 }
