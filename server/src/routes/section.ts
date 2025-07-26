@@ -12,3 +12,5 @@ router.get('/', getSections)
  * 특정 섹션 조회
  */
 router.get('/:id', getSectionById)
+
+export default router
