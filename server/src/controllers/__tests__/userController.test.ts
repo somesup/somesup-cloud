@@ -1,6 +1,6 @@
 import { updateNickname, updateUser } from '../userController'
 import { errors, success } from '../../utils/response'
-import { userService } from '../../services/userService'
+import { UserNotFoundError, userService } from '../../services/userService'
 import { AuthenticatedRequest } from '../../middlewares/authenticateJWT'
 import { Response } from 'express'
 
@@ -129,7 +129,7 @@ describe('updateUser', () => {
 
     await updateUser(req, res)
 
-    expect(errors.badRequest).toHaveBeenCalledWith(res, 'Invalid request body, possibly wrong field names')
+    expect(errors.badRequest).toHaveBeenCalledWith(res, 'Invalid request body, possibly due to unsupported fields')
   })
 
   it('should update user info and return updated user', async () => {
@@ -158,5 +158,35 @@ describe('updateUser', () => {
     expect(success).toHaveBeenCalledWith(res, updatedUser, {
       message: 'User information updated successfully',
     })
+  })
+
+  it('should return not found if user does not exist', async () => {
+    const req = {
+      userId: 999, // Non-existent user
+      body: { nickname: '새로운 닉네임' },
+    } as unknown as AuthenticatedRequest
+
+    const res = mockRes()
+
+    ;(userService.updateUserInfo as jest.Mock).mockRejectedValue(new UserNotFoundError('User not found'))
+
+    await updateUser(req, res)
+
+    expect(errors.notFound).toHaveBeenCalledWith(res, 'User not found')
+  })
+
+  it('should return internal error on unexpected error', async () => {
+    const req = {
+      userId: 1,
+      body: { nickname: '새로운 닉네임' },
+    } as unknown as AuthenticatedRequest
+
+    const res = mockRes()
+
+    ;(userService.updateUserInfo as jest.Mock).mockRejectedValue(new Error('Unexpected error'))
+
+    await updateUser(req, res)
+
+    expect(errors.internal).toHaveBeenCalledWith(res)
   })
 })

@@ -1,6 +1,7 @@
-import { userService } from '../userService'
+import { UserNotFoundError, userService } from '../userService'
 import { prismaMock } from '../../../prisma/mock'
 import { User } from '@prisma/client'
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
 
 describe('userService', () => {
   const mockUser: User = {
@@ -116,5 +117,25 @@ describe('userService', () => {
       })
       expect(result).toEqual(updatedUser)
     })
+  })
+
+  it('should throw UserNotFoundError if user not found', async () => {
+    const error = new PrismaClientKnownRequestError('Not Found', {
+      code: 'P2025',
+      clientVersion: '4.0.0',
+      meta: { target: ['id'] },
+    })
+    ;(prismaMock.user.update as jest.Mock).mockRejectedValue(error)
+
+    await expect(userService.updateUserInfo(999, { nickname: '새닉네임' })).rejects.toThrow(UserNotFoundError)
+  })
+
+  it('should throw generic error on other Prisma errors', async () => {
+    const error = new Error('Database error')
+    ;(prismaMock.user.update as jest.Mock).mockRejectedValue(error)
+
+    await expect(userService.updateUserInfo(1, { nickname: '새닉네임' })).rejects.toThrow(
+      'Failed to update user information',
+    )
   })
 })

@@ -1,6 +1,14 @@
 import { prisma } from '../../prisma/prisma'
 import { User } from '@prisma/client'
 import { UpdateUserRequest } from '../controllers/userController'
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
+
+export class UserNotFoundError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'UserNotFoundError'
+  }
+}
 
 /**
  * 사용자 관련 데이터베이스 작업을 처리하는 서비스 객체입니다.
@@ -94,10 +102,17 @@ export const userService = {
    * @returns {Promise<User>} 업데이트된 사용자 객체
    */
   updateUserInfo: async (userId: number, updateInfo: UpdateUserRequest): Promise<User> => {
-    const user = await prisma.user.update({
-      where: { id: userId },
-      data: updateInfo,
-    })
-    return user
+    try {
+      const user = await prisma.user.update({
+        where: { id: userId },
+        data: updateInfo,
+      })
+      return user
+    } catch (error) {
+      if (error instanceof PrismaClientKnownRequestError && error.code === 'P2025') {
+        throw new UserNotFoundError(`User with ID ${userId} not found`)
+      }
+      throw new Error('Failed to update user information')
+    }
   },
 }
