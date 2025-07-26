@@ -1,5 +1,6 @@
 import { prisma } from '../../prisma/prisma'
 import { User } from '@prisma/client'
+import { UpdateUserRequest } from '../controllers/userController'
 
 /**
  * 사용자 관련 데이터베이스 작업을 처리하는 서비스 객체입니다.
@@ -80,6 +81,22 @@ export const userService = {
     const user = await prisma.user.update({
       where: { id: userId },
       data: { nickname },
+    })
+    return user
+  },
+
+  /**
+   * 사용자의 정보를 업데이트합니다.
+   *
+   * @async
+   * @param {number} userId - 정보를 업데이트할 사용자의 ID
+   * @param {UpdateUserRequest} updateInfo - 업데이트할 사용자 정보
+   * @returns {Promise<User>} 업데이트된 사용자 객체
+   */
+  updateUserInfo: async (userId: number, updateInfo: UpdateUserRequest): Promise<User> => {
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: updateInfo,
     })
     return user
   },
