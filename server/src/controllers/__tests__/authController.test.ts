@@ -69,14 +69,14 @@ describe('verifyPhoneAuth', () => {
     expect(errors.badRequest).toHaveBeenCalledWith(res, 'Phone number and verification code are required')
   })
 
-  it('should return 400 if verification code is invalid', async () => {
+  it('should return 401 if verification code is invalid', async () => {
     ;(authService.verifyPhoneCode as jest.Mock).mockResolvedValue(false)
     const req = mockReq({ phoneNumber: '010', code: '123' })
     const res = mockRes()
 
     await verifyPhoneAuth(req, res)
 
-    expect(errors.badRequest).toHaveBeenCalledWith(res, 'Invalid verification code')
+    expect(errors.unauthorized).toHaveBeenCalledWith(res, 'Invalid verification code')
   })
 
   it('should return user data and tokens if user exists', async () => {
@@ -126,7 +126,7 @@ describe('verifyPhoneAuth', () => {
     )
   })
 
-  it('should handle CodeDoesnotExistError', async () => {
+  it('should return 404 if verification code does not exist or has expired', async () => {
     ;(authService.verifyPhoneCode as jest.Mock).mockImplementation(() => {
       throw new CodeDoesnotExistError('Verification code does not exist or has expired')
     })
@@ -135,7 +135,7 @@ describe('verifyPhoneAuth', () => {
 
     await verifyPhoneAuth(req, res)
 
-    expect(errors.badRequest).toHaveBeenCalledWith(res, 'Verification code does not exist or has expired')
+    expect(errors.notFound).toHaveBeenCalledWith(res, 'Verification code does not exist or has expired')
   })
 
   it('should return Internal server error on unexpected error', async () => {
