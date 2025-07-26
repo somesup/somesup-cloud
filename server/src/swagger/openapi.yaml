@@ -288,6 +288,83 @@ paths:
                     success: false
                     message: Internal server error
 
+  /users:
+    patch:
+      summary: 사용자 정보 업데이트
+      description: 사용자의 정보를 업데이트 합니다. 현재는 닉네임만 업데이트 가능합니다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserInfoRequest'
+      responses:
+        '200':
+          description: 사용자 정보 업데이트 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              examples:
+                success:
+                  summary: 사용자 정보 업데이트 성공
+                  value:
+                    success: true
+                    data: '#/components/schemas/User'
+                    message: User information updated successfully
+
+        '400':
+          description: 잘못된 요청 (허용되지 않은 필드 포함 등)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidRequest:
+                  summary: 잘못된 요청
+                  value:
+                    success: false
+                    message: Invalid request, possibly due to unsupported fields
+
+        '401':
+          description: 인증 실패 (토큰이 없거나 유효하지 않음)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                unauthorized:
+                  summary: 인증 실패
+                  value:
+                    success: false
+                    message: User ID is required
+
+        '404':
+          description: 사용자 정보 없음
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                userNotFound:
+                  summary: 사용자 정보 없음
+                  value:
+                    success: false
+                    message: User not found
+
+        '500':
+          description: 서버 오류
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                serverError:
+                  summary: 서버 오류
+                  value:
+                    success: false
+                    message: Internal server error
+
 components:
   schemas:
     PhoneRequest:
@@ -324,6 +401,14 @@ components:
           type: string
           description: 리프레시 토큰
           example: your_refresh_token_here
+
+    UpdateUserInfoRequest:
+      type: object
+      properties:
+        nickname:
+          type: string
+          description: 사용자 닉네임
+          example: '새로운 닉네임'
 
     PhoneVerifySuccessResponse:
       type: object
