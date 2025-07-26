@@ -63,7 +63,7 @@ export const verifyPhoneAuth = async (req: Request, res: Response) => {
   try {
     const isValidCode = await authService.verifyPhoneCode(phoneNumber, code)
     if (!isValidCode) {
-      return errors.badRequest(res, 'Invalid verification code')
+      return errors.unauthorized(res, 'Invalid verification code')
     }
 
     let user = await userService.findUserByPhone(phoneNumber)
@@ -88,7 +88,7 @@ export const verifyPhoneAuth = async (req: Request, res: Response) => {
     })
   } catch (error) {
     if (error instanceof CodeDoesnotExistError) {
-      return errors.badRequest(res, 'Verification code does not exist or has expired')
+      return errors.notFound(res, 'Verification code does not exist or has expired')
     }
     return errors.internal(res)
   }
