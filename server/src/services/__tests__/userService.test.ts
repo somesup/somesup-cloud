@@ -175,15 +175,7 @@ describe('userService', () => {
   })
 
   describe('updateUserSectionPreferences', () => {
-    it('should return immediately if preferences are empty', async () => {
-      const preferences: UserSectionPreference[] = []
-
-      await expect(userService.updateUserSectionPreferences(1, preferences)).resolves.toBeUndefined()
-      expect(prismaMock.articleSection.findMany).not.toHaveBeenCalled()
-      expect(prismaMock.userArticleSectionPreference.upsert).not.toHaveBeenCalled()
-    })
-
-    it('should upsert user section preferences', async () => {
+    it('should upsert user section preferences and return updated preferences', async () => {
       const preferences: UserSectionPreference[] = [
         { sectionId: 1, preference: 1 },
         { sectionId: 2, preference: 2 },
@@ -229,6 +221,10 @@ describe('userService', () => {
           section_id: 2,
           preference: 2,
         },
+      })
+
+      expect(prismaMock.userArticleSectionPreference.findMany).toHaveBeenCalledWith({
+        where: { user_id: 1 },
       })
     })
 

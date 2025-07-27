@@ -1,5 +1,5 @@
 import { prisma } from '../../prisma/prisma'
-import { User } from '@prisma/client'
+import { User, UserArticleSectionPreference } from '@prisma/client'
 import { UpdateUserRequest, UserSectionPreference } from '../types/user'
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
 
@@ -130,12 +130,11 @@ export const userService = {
     }
   },
 
-  updateUserSectionPreferences: async (userId: number, preferences: UserSectionPreference[]): Promise<void> => {
+  updateUserSectionPreferences: async (
+    userId: number,
+    preferences: UserSectionPreference[],
+  ): Promise<UserArticleSectionPreference[]> => {
     try {
-      if (preferences.length === 0) {
-        return
-      }
-
       // 중복된 sectionId를 제거하고 유효한 sectionId만 필터링합니다.
       const sectionIds = [...new Set(preferences.map((pref) => pref.sectionId))]
       const validSectionIds = await prisma.articleSection
@@ -168,6 +167,11 @@ export const userService = {
 
       // 모든 upsert 작업을 병렬로 실행합니다.
       await Promise.all(upsertPromises)
+
+      // 업데이트된 사용자 섹션 선호도를 반환합니다.
+      return prisma.userArticleSectionPreference.findMany({
+        where: { user_id: userId },
+      })
     } catch (error) {
       throw new Error('Failed to update user section preferences')
     }

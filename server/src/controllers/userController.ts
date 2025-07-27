@@ -3,7 +3,6 @@ import { Response } from 'express'
 import { errors, success } from '../utils/response'
 import { AuthenticatedRequest } from '../middlewares/authenticateJWT'
 import { UserNotFoundError, userService } from '../services/userService'
-import { UpdateUserRequest, UserSectionPreference } from '../types/user'
 
 /**
  * 사용자의 닉네임을 업데이트하는 컨트롤러입니다.
@@ -106,12 +105,12 @@ export const updateUserSectionPreferences = async (req: AuthenticatedRequest, re
     const updateUserSectionPrefsSchema = z.array(userSectionPrefSchema)
 
     const parsed = updateUserSectionPrefsSchema.safeParse(req.body)
-    if (!parsed.success) {
+    if (!parsed.success || parsed.data.length === 0) {
       return errors.badRequest(res, 'Invalid request body, please check body format')
     }
 
-    await userService.updateUserSectionPreferences(userId, parsed.data)
-    return success(res, null, {
+    const updatedPrefs = await userService.updateUserSectionPreferences(userId, parsed.data)
+    return success(res, updatedPrefs, {
       message: 'User section preferences updated successfully',
     })
   } catch (error) {

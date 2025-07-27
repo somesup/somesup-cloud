@@ -219,10 +219,10 @@ describe('updateUserSectionPreferences', () => {
   })
 
   it('should update user section preferences', async () => {
-    const preferences = [
-      { sectionId: 1, preference: 1 },
-      { sectionId: 2, preference: 2 },
-    ]
+    const preferences = [{ sectionId: 1, preference: 1 }]
+    const updatedPrefs = [{ sectionId: 1, preference: 1 }]
+
+    ;(userService.updateUserSectionPreferences as jest.Mock).mockResolvedValue(updatedPrefs)
 
     const req = {
       userId: 1,
@@ -234,7 +234,7 @@ describe('updateUserSectionPreferences', () => {
     await updateUserSectionPreferences(req, res)
 
     expect(userService.updateUserSectionPreferences).toHaveBeenCalledWith(1, preferences)
-    expect(success).toHaveBeenCalledWith(res, null, {
+    expect(success).toHaveBeenCalledWith(res, updatedPrefs, {
       message: 'User section preferences updated successfully',
     })
   })

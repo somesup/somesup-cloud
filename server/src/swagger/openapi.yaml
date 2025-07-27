@@ -365,6 +365,63 @@ paths:
                     success: false
                     message: Internal server error
 
+  /users/section-preferences:
+    patch:
+      summary: 사용자 섹션 선호도 업데이트
+      description: 사용자의 섹션 선호도를 업데이트합니다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserSectionPreferences'
+      responses:
+        '200':
+          description: 사용자 섹션 선호도 업데이트 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSectionPreferencesResponse'
+
+        '400':
+          description: 잘못된 요청 (필드 타입 오류 등)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidRequest:
+                  summary: 잘못된 요청
+                  value:
+                    success: false
+                    message: Invalid request body, please check body format
+
+        '401':
+          description: 인증 실패 (토큰이 없거나 유효하지 않음)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                unauthorized:
+                  summary: 인증 실패
+                  value:
+                    success: false
+                    message: User ID is required
+
+        '500':
+          description: 서버 오류
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                serverError:
+                  summary: 서버 오류
+                  value:
+                    success: false
+                    message: Internal server error
+
   /sections:
     get:
       summary: 섹션 목록 조회
@@ -705,3 +762,30 @@ components:
         message:
           type: string
           example: Section retrieved successfully
+
+    UserSectionPreferences:
+      type: object
+      properties:
+        userId:
+          type: integer
+          example: 1
+        sectionId:
+          type: integer
+          example: 2
+        preferences:
+          type: integer
+          example: 2
+
+    UserSectionPreferencesResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSectionPreferences'
+        message:
+          type: string
+          example: User section preferences updated successfully
