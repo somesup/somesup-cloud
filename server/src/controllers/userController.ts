@@ -3,6 +3,7 @@ import { Response } from 'express'
 import { errors, success } from '../utils/response'
 import { AuthenticatedRequest } from '../middlewares/authenticateJWT'
 import { UserNotFoundError, userService } from '../services/userService'
+import { UpdateUserRequest, UserSectionPreference } from '../types/user'
 
 /**
  * 사용자의 닉네임을 업데이트하는 컨트롤러입니다.
@@ -41,13 +42,6 @@ export const updateNickname = async (req: AuthenticatedRequest, res: Response): 
   } catch (error) {
     return errors.internal(res)
   }
-}
-
-/**
- * 사용자 정보를 업데이트하는 요청 형태입니다.
- */
-export type UpdateUserRequest = {
-  nickname?: string
 }
 
 /**
@@ -91,6 +85,36 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response): Prom
     if (error instanceof UserNotFoundError) {
       return errors.notFound(res, 'User not found')
     }
+    return errors.internal(res)
+  }
+}
+
+export const updateUserSectionPreferences = async (req: AuthenticatedRequest, res: Response): Promise<Response> => {
+  try {
+    const userId = req.userId
+    if (!userId) {
+      return errors.unauthorized(res, 'User ID is required')
+    }
+
+    const userSectionPrefSchema = z
+      .object({
+        sectionId: z.number(),
+        preference: z.number(),
+      })
+      .strict()
+
+    const updateUserSectionPrefsSchema = z.array(userSectionPrefSchema)
+
+    const parsed = updateUserSectionPrefsSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return errors.badRequest(res, 'Invalid request body, please check body format')
+    }
+
+    await userService.updateUserSectionPreferences(userId, parsed.data)
+    return success(res, null, {
+      message: 'User section preferences updated successfully',
+    })
+  } catch (error) {
     return errors.internal(res)
   }
 }

@@ -1,6 +1,6 @@
 import { prisma } from '../../prisma/prisma'
 import { User } from '@prisma/client'
-import { UpdateUserRequest } from '../controllers/userController'
+import { UpdateUserRequest, UserSectionPreference } from '../types/user'
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
 
 export class UserNotFoundError extends Error {
@@ -127,6 +127,49 @@ export const userService = {
         throw new UserNotFoundError(`User with ID ${userId} not found`)
       }
       throw new Error('Failed to update user information')
+    }
+  },
+
+  updateUserSectionPreferences: async (userId: number, preferences: UserSectionPreference[]): Promise<void> => {
+    try {
+      if (preferences.length === 0) {
+        return
+      }
+
+      // 중복된 sectionId를 제거하고 유효한 sectionId만 필터링합니다.
+      const sectionIds = [...new Set(preferences.map((pref) => pref.sectionId))]
+      const validSectionIds = await prisma.articleSection
+        .findMany({
+          where: {
+            id: { in: sectionIds },
+          },
+          select: { id: true },
+        })
+        .then((sections) => sections.map((section) => section.id))
+
+      const upsertPromises = preferences
+        .filter((p) => validSectionIds.includes(p.sectionId))
+        .map((pref) => {
+          return prisma.userArticleSectionPreference.upsert({
+            where: {
+              user_id_section_id: {
+                user_id: userId,
+                section_id: pref.sectionId,
+              },
+            },
+            update: { preference: pref.preference },
+            create: {
+              user_id: userId,
+              section_id: pref.sectionId,
+              preference: pref.preference,
+            },
+          })
+        })
+
+      // 모든 upsert 작업을 병렬로 실행합니다.
+      await Promise.all(upsertPromises)
+    } catch (error) {
+      throw new Error('Failed to update user section preferences')
     }
   },
 }
