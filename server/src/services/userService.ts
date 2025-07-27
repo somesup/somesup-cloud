@@ -130,6 +130,15 @@ export const userService = {
     }
   },
 
+  /**
+   * 사용자의 섹션 선호도를 업데이트합니다.
+   * 중복된 sectionId를 제거하고 유효한 sectionId만 필터링하여 업데이트합니다.
+   * 이 작업은 병렬로 실행되어 성능을 최적화합니다.
+   * @param {number} userId - 섹션 선호도를 업데이트할 사용자의 ID
+   * @param {UserSectionPreference[]} preferences - 업데이트할 섹션 선호도 배열
+   * @returns {Promise<UserArticleSectionPreference[]>} 업데이트된 사용자 섹션 선호도 배열
+   * @throws {Error} - 섹션 선호도 업데이트 실패 시 오류 발생
+   */
   updateUserSectionPreferences: async (
     userId: number,
     preferences: UserSectionPreference[],
