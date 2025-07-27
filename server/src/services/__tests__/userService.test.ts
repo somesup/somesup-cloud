@@ -2,6 +2,7 @@ import { UserNotFoundError, userService } from '../userService'
 import { prismaMock } from '../../../prisma/mock'
 import { User, ArticleSection } from '@prisma/client'
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
+import { UserSectionPreference } from '../../types/user'
 
 describe('userService', () => {
   const mockUser: User = {
@@ -171,5 +172,72 @@ describe('userService', () => {
     await expect(userService.updateUserInfo(1, { nickname: '새닉네임' })).rejects.toThrow(
       'Failed to update user information',
     )
+  })
+
+  describe('updateUserSectionPreferences', () => {
+    it('should upsert user section preferences and return updated preferences', async () => {
+      const preferences: UserSectionPreference[] = [
+        { sectionId: 1, preference: 1 },
+        { sectionId: 2, preference: 2 },
+      ]
+      const sections: ArticleSection[] = [
+        { id: 1, name: 'politics' },
+        { id: 2, name: 'economy' },
+      ]
+
+      ;(prismaMock.articleSection.findMany as jest.Mock).mockResolvedValue(sections)
+      ;(prismaMock.userArticleSectionPreference.upsert as jest.Mock).mockResolvedValue(undefined)
+
+      await userService.updateUserSectionPreferences(1, preferences)
+      expect(prismaMock.articleSection.findMany).toHaveBeenCalledWith({
+        where: { id: { in: [1, 2] } },
+        select: { id: true },
+      })
+      expect(prismaMock.userArticleSectionPreference.upsert).toHaveBeenCalledTimes(2)
+      expect(prismaMock.userArticleSectionPreference.upsert).toHaveBeenCalledWith({
+        where: {
+          user_id_section_id: {
+            user_id: 1,
+            section_id: 1,
+          },
+        },
+        update: { preference: 1 },
+        create: {
+          user_id: 1,
+          section_id: 1,
+          preference: 1,
+        },
+      })
+      expect(prismaMock.userArticleSectionPreference.upsert).toHaveBeenCalledWith({
+        where: {
+          user_id_section_id: {
+            user_id: 1,
+            section_id: 2,
+          },
+        },
+        update: { preference: 2 },
+        create: {
+          user_id: 1,
+          section_id: 2,
+          preference: 2,
+        },
+      })
+
+      expect(prismaMock.userArticleSectionPreference.findMany).toHaveBeenCalledWith({
+        where: { user_id: 1 },
+      })
+    })
+
+    it('should handle errors during upsert', async () => {
+      const preferences: UserSectionPreference[] = [{ sectionId: 1, preference: 1 }]
+      const sections: ArticleSection[] = [{ id: 1, name: 'politics' }]
+
+      ;(prismaMock.articleSection.findMany as jest.Mock).mockResolvedValue(sections)
+      ;(prismaMock.userArticleSectionPreference.upsert as jest.Mock).mockRejectedValue(new Error('Upsert failed'))
+
+      await expect(userService.updateUserSectionPreferences(1, preferences)).rejects.toThrow(
+        'Failed to update user section preferences',
+      )
+    })
   })
 })
