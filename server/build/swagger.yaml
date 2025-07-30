@@ -74,6 +74,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PhoneVerifySuccessResponse'
+              examples:
+                successWithNewUser:
+                  summary: 신규 사용자 인증 성공
+                  value:
+                    success: true
+                    data:
+                      user:
+                        id: 1
+                        phone: 01012345678
+                        nickname: 슈퍼파워알파
+                      tokens:
+                        accessToken: <access_token>
+                        refreshToken: <refresh_token>
+                      isCreated: true
+                    message: Phone verification successful
+                successWithExistingUser:
+                  summary: 기존 사용자 인증 성공
+                  value:
+                    success: true
+                    data:
+                      user:
+                        id: 2
+                        phone: 01087654321
+                        nickname: 기존사용자닉네임
+                      tokens:
+                        accessToken: <access_token>
+                        refreshToken: <refresh_token>
+                      isCreated: false
+                    message: Phone verification successful
         '400':
           description: 잘못된 요청 (파라미터 누락)
           content:
@@ -545,6 +574,9 @@ components:
               $ref: '#/components/schemas/User'
             tokens:
               $ref: '#/components/schemas/Tokens'
+            isCreated:
+              type: boolean
+              example: true
         message:
           type: string
           example: Phone verification successful
