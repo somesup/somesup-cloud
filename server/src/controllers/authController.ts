@@ -67,9 +67,11 @@ export const verifyPhoneAuth = async (req: Request, res: Response) => {
     }
 
     let user = await userService.findUserByPhone(phoneNumber)
+    let isCreated: Boolean = false
     if (!user) {
       const nickname = await generateRandomNickname()
       user = await userService.createUser(phoneNumber, nickname, true)
+      isCreated = true
     }
 
     const tokens = await authService.generateTokens(user.id)
@@ -81,6 +83,7 @@ export const verifyPhoneAuth = async (req: Request, res: Response) => {
         nickname: user.nickname,
       },
       tokens,
+      isCreated,
     }
 
     return success(res, userData, {

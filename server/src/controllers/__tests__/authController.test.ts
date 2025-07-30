@@ -94,6 +94,7 @@ describe('verifyPhoneAuth', () => {
       {
         user: { id: 1, phone: '010', nickname: '닉네임' },
         tokens: { accessToken: 'A', refreshToken: 'R' },
+        isCreated: false,
       },
       {
         message: 'Phone verification successful',
@@ -119,6 +120,7 @@ describe('verifyPhoneAuth', () => {
       {
         user: { id: 1, phone: '010', nickname: '랜덤닉네임' },
         tokens: { accessToken: 'A', refreshToken: 'R' },
+        isCreated: true,
       },
       {
         message: 'Phone verification successful',
