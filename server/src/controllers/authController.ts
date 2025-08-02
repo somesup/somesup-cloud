@@ -2,7 +2,7 @@ import { Request, Response } from 'express'
 import { errors, success } from '../utils/response'
 import { authService, CodeDoesnotExistError, RefreshTokenNotFoundError } from '../services/authService'
 import { userService } from '../services/userService'
-import { generateRandomNickname } from '../utils/nickname'
+import { generateGuestPhoneNumber, generateRandomNickname } from '../utils/generate'
 import { verifyRefreshToken } from '../config/jwt'
 
 /**
@@ -93,6 +93,45 @@ export const verifyPhoneAuth = async (req: Request, res: Response) => {
     if (error instanceof CodeDoesnotExistError) {
       return errors.notFound(res, 'Verification code does not exist or has expired')
     }
+    return errors.internal(res)
+  }
+}
+
+/**
+ * 게스트 로그인 컨트롤러입니다.
+ * 사용자가 게스트로 로그인할 때 호출되며, 임시 휴대폰 번호와 닉네임을 생성하여 새로운 사용자를 생성합니다.
+ * 생성된 사용자 정보와 JWT 토큰을 반환합니다.
+ *
+ * @param {Request} req - Express 요청 객체.
+ * @param {Response} res - Express 응답 객체.
+ *
+ * @example
+ * // 요청 예시
+ * POST /api/auth/guest-login
+ */
+export const guestLogin = async (req: Request, res: Response) => {
+  try {
+    const phoneNumber = await generateGuestPhoneNumber()
+    const nickname = await generateRandomNickname()
+    const user = await userService.createUser(phoneNumber, nickname, false)
+
+    const tokens = await authService.generateTokens(user.id)
+
+    const userData = {
+      user: {
+        id: user.id,
+        phone: user.phone,
+        nickname: user.nickname,
+      },
+      tokens,
+      isCreated: true,
+    }
+
+    return success(res, userData, {
+      message: 'Guest login successful',
+    })
+  } catch (error) {
+    console.error('Error during guest login:', error)
     return errors.internal(res)
   }
 }

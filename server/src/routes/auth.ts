@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { refreshAccessToken, requestPhoneAuth, verifyPhoneAuth } from '../controllers/authController'
+import { guestLogin, refreshAccessToken, requestPhoneAuth, verifyPhoneAuth } from '../controllers/authController'
 
 const router = Router()
 
@@ -14,6 +14,12 @@ router.post('/phone/request', requestPhoneAuth)
  * POST /phone/verify
  */
 router.post('/phone/verify', verifyPhoneAuth)
+
+/**
+ * Guest 사용자 생성
+ * POST /guest-login
+ */
+router.post('/guest-login', guestLogin)
 
 /**
  * Access Token 갱신

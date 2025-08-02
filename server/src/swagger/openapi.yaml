@@ -160,6 +160,47 @@ paths:
                     success: false
                     message: Internal server error
 
+  /auth/guest-login:
+    post:
+      summary: 게스트 로그인
+      description: |
+        게스트 사용자를 위한 임시 로그인 기능입니다. 사용자 전화번호는 `GUEST-<idx>` 형식으로 생성됩니다.
+      responses:
+        '200':
+          description: 게스트 로그인 성공, 액세스 토큰 반환
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhoneVerifySuccessResponse'
+              examples:
+                successWithNewUser:
+                  summary: 게스트 사용자 생성 성공
+                  value:
+                    success: true
+                    data:
+                      user:
+                        id: 1
+                        phone: 'GUEST-1'
+                        nickname: '슈퍼파워알파'
+                      tokens:
+                        accessToken: <access_token>
+                        refreshToken: <refresh_token>
+                      isCreated: true
+                    message: Guest login successful
+
+        '500':
+          description: 서버 오류
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                serverError:
+                  summary: 서버 오류
+                  value:
+                    success: false
+                    message: Internal server error
+
   /auth/refresh:
     post:
       summary: 액세스 토큰 갱신
