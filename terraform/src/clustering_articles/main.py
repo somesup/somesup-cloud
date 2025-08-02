@@ -30,7 +30,10 @@ class Config:
     MYSQL_PASSWORD = os.getenv('MYSQL_FETCHER_PASSWORD', '')
     MYSQL_DATABASE = 'somesup'
 
-    SIMILARITY_THRESHOLD = float(os.getenv('SIMILARITY_THRESHOLD', '0.8'))
+    SIMILARITY_THRESHOLD = float(os.getenv('SIMILARITY_THRESHOLD', '0.9'))
+
+    MAX_BATCH_SIZE = int(os.getenv('MAX_BATCH_SIZE', '20'))
+    MAX_CONTENT_LENGTH = int(os.getenv('MAX_CONTENT_LENGTH', '2000'))
 
     def validate(self):
         """Validate the configuration.
@@ -154,10 +157,14 @@ class GeminiClient:
         self,
         project: str,
         location: str,
+        max_content_length: int,
+        max_batch_size: int,
     ):
         """Initialize the GeminiClient."""
         self._project = project
         self._location = location
+        self._max_content_length = max_content_length
+        self._max_batch_size = max_batch_size
 
         self._client = google.genai.Client(
             vertexai=True,
@@ -167,8 +174,7 @@ class GeminiClient:
 
     def _truncate_embed_contents(
         self,
-        articles: SimpleArticle,
-        max_length: int = 1400,
+        article: SimpleArticle,
     ) -> str:
         """Truncate the article content for embedding.
 
@@ -176,24 +182,72 @@ class GeminiClient:
         it fits within the limits of the embedding model.
 
         Args:
-            articles: The SimpleArticle instance to truncate.
-            max_length: The maximum length of the content to embed.
+            article: The SimpleArticle instance to truncate.
 
         Returns:
             A string containing the truncated content of the article.
         """
-        content = f"{articles.title}\n\n{articles.content[:max_length]}"
-        return content
+        # 제목과 내용을 결합하되, 전체 길이가 max_content_length를 초과하지 않도록 함
+        title = article.title
+        available_content_length = self._max_content_length - len(
+            title) - 2  # 2 for "\n\n"
 
-    def _get_embeddings(
+        if available_content_length > 0:
+            content = article.content[:available_content_length]
+            return f"{title}\n\n{content}"
+        else:
+            # 제목이 너무 길면 제목만 자르기
+            return title[:self._max_content_length]
+
+    def _estimate_token_count(self, content: str) -> int:
+        """Estimate token count for content.
+        
+        Simple heuristic: 1 token ≈ 4 characters for Korean/English mixed content.
+        """
+        return len(content) // 4
+
+    def _create_smart_batches(
+            self, articles: list[SimpleArticle]) -> list[list[SimpleArticle]]:
+        """Create batches of articles that respect token limits.
+        
+        Args:
+            articles: List of articles to batch.
+            
+        Returns:
+            List of article batches.
+        """
+        batches = []
+        current_batch = []
+        current_token_count = 0
+        max_tokens_per_batch = 18000
+
+        for article in articles:
+            content = self._truncate_embed_contents(article)
+            estimated_tokens = self._estimate_token_count(content)
+
+            # 현재 배치에 추가했을 때 토큰 한계를 초과하거나 배치 크기 한계를 초과하는 경우
+            if (current_token_count + estimated_tokens > max_tokens_per_batch
+                    or len(current_batch) >= self._max_batch_size):
+
+                if current_batch:  # 현재 배치가 비어있지 않으면 저장
+                    batches.append(current_batch)
+                current_batch = [article]
+                current_token_count = estimated_tokens
+            else:
+                current_batch.append(article)
+                current_token_count += estimated_tokens
+
+        # 마지막 배치 추가
+        if current_batch:
+            batches.append(current_batch)
+
+        return batches
+
+    def _get_embeddings_batch(
         self,
         articles: list[SimpleArticle],
     ) -> list[google.genai.types.ContentEmbedding] | None:
-        """Get embeddings for a list of articles.
-
-        This method retrieves embeddings for the provided articles using the
-        Gemini API. It truncates the content of each article to fit within the
-        embedding model's limits.
+        """Get embeddings for a batch of articles.
 
         Args:
             articles: A list of SimpleArticle instances to get embeddings for.
@@ -203,32 +257,83 @@ class GeminiClient:
             each article, or None if no articles are provided or no embeddings are returned.
         """
         if not articles:
-            logger.info("No articles to get embeddings for.")
             return []
 
         article_contents = [
             self._truncate_embed_contents(article) for article in articles
         ]
 
-        result = self._client.models.embed_content(
-            contents=article_contents,
-            model='text-embedding-004',
-            config=google.genai.types.EmbedContentConfig(
-                output_dimensionality=768),
-        )
+        # 배치 크기와 토큰 수 로깅
+        total_tokens = sum(
+            self._estimate_token_count(content)
+            for content in article_contents)
 
-        return result.embeddings
+        try:
+            result = self._client.models.embed_content(
+                contents=article_contents,
+                model='text-embedding-004',
+                config=google.genai.types.EmbedContentConfig(
+                    output_dimensionality=768),
+            )
+            return result.embeddings
+        except Exception as e:
+            logger.error(f"Error getting embeddings for batch: {e}")
+            # 배치가 여전히 너무 크면 개별적으로 처리
+            if "token count" in str(e) and len(articles) > 1:
+                logger.info(
+                    "Batch too large, processing articles individually")
+                return self._get_embeddings_individually(articles)
+            raise
+
+    def _get_embeddings_individually(
+        self,
+        articles: list[SimpleArticle],
+    ) -> list[google.genai.types.ContentEmbedding]:
+        """Get embeddings for articles one by one as fallback.
+
+        Args:
+            articles: A list of SimpleArticle instances to get embeddings for.
+
+        Returns:
+            A list of ContentEmbedding instances.
+        """
+        embeddings = []
+        for article in articles:
+            try:
+                content = self._truncate_embed_contents(article)
+                result = self._client.models.embed_content(
+                    contents=[content],
+                    model='text-embedding-004',
+                    config=google.genai.types.EmbedContentConfig(
+                        output_dimensionality=768),
+                )
+                if result.embeddings:
+                    embeddings.append(result.embeddings[0])
+                else:
+                    logger.warning(
+                        f"No embedding returned for article {article.id}")
+                    # 빈 임베딩 벡터 생성 (768차원)
+                    dummy_embedding = google.genai.types.ContentEmbedding(
+                        values=[0.0] * 768)
+                    embeddings.append(dummy_embedding)
+            except Exception as e:
+                logger.error(
+                    f"Error getting embedding for article {article.id}: {e}")
+                # 오류 발생 시 더미 임베딩 추가
+                dummy_embedding = google.genai.types.ContentEmbedding(
+                    values=[0.0] * 768)
+                embeddings.append(dummy_embedding)
+
+        return embeddings
 
     def map_embeddings(
         self,
         articles: list[SimpleArticle],
     ) -> None:
-        """Map embeddings to articles.
+        """Map embeddings to articles using batch processing.
 
-        This method retrieves embeddings for the provided articles and maps
-        them to the corresponding SimpleArticle instances. It updates the
-        `embedding_vector` attribute of each article with the retrieved
-        embeddings.
+        This method retrieves embeddings for the provided articles in batches
+        and maps them to the corresponding SimpleArticle instances.
 
         Args:
             articles: A list of SimpleArticle instances to map embeddings to.
@@ -238,16 +343,47 @@ class GeminiClient:
             in place with their corresponding embeddings.
         """
         if not articles:
-            logger.info("No articles to cluster.")
+            logger.info("No articles to process for embeddings.")
             return
 
-        embeddings = self._get_embeddings(articles)
-        if not embeddings:
-            logger.info("No embeddings returned for articles.")
-            return
+        logger.info(f"Processing embeddings for {len(articles)} articles")
 
-        for article, embedding in zip(articles, embeddings):
-            article.embedding_vector = embedding.values
+        # 스마트 배치 생성
+        batches = self._create_smart_batches(articles)
+        logger.info(f"Created {len(batches)} batches for processing")
+
+        # 각 배치별로 임베딩 처리
+        article_index = 0
+        for batch_idx, batch in enumerate(batches):
+            logger.info(
+                f"Processing batch {batch_idx + 1}/{len(batches)} with {len(batch)} articles"
+            )
+
+            try:
+                embeddings = self._get_embeddings_batch(batch)
+                if embeddings and len(embeddings) == len(batch):
+                    for article, embedding in zip(batch, embeddings):
+                        article.embedding_vector = embedding.values
+                        article_index += 1
+                else:
+                    logger.warning(
+                        f"Mismatch in embedding count for batch {batch_idx}")
+                    # 개별 처리로 fallback
+                    individual_embeddings = self._get_embeddings_individually(
+                        batch)
+                    for article, embedding in zip(batch,
+                                                  individual_embeddings):
+                        article.embedding_vector = embedding.values
+                        article_index += 1
+            except Exception as e:
+                logger.error(f"Failed to process batch {batch_idx}: {e}")
+                # 해당 배치의 모든 기사에 더미 임베딩 할당
+                for article in batch:
+                    article.embedding_vector = [0.0] * 768
+                    article_index += 1
+
+        logger.info(
+            f"Completed embedding processing for {article_index} articles")
 
 
 class ClusterClient:
@@ -279,6 +415,7 @@ class ClusterClient:
 
         valid_articles = [
             article for article in articles if article.embedding_vector
+            and sum(article.embedding_vector) != 0  # 더미 임베딩 제외
         ]
         if not valid_articles:
             logger.info("No valid articles with embeddings to cluster.")
@@ -336,6 +473,8 @@ def main(request):
     gemini_client = GeminiClient(
         project=config.PROJECT_ID,
         location=config.LOCATION,
+        max_content_length=config.MAX_CONTENT_LENGTH,
+        max_batch_size=config.MAX_BATCH_SIZE,
     )
 
     cluster_client = ClusterClient(
@@ -358,6 +497,8 @@ def main(request):
 
     return {
         "status": "success",
+        "total_articles": len(unprocessed_articles),
+        "total_clusters": len(clusters),
         "clusters":
         [[article.id for article in cluster] for cluster in clusters]
     }, 200
