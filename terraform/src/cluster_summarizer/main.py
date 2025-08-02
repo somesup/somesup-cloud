@@ -1,15 +1,18 @@
-import os
-import logging
 import contextlib
-from typing import Iterator, Any, Optional
 import dataclasses
+import io
+import logging
+import os
+import urllib.request
+from typing import Any, Iterator, Optional
 
 import functions_framework
-import google.genai
 import google.cloud.logging
 import google.cloud.sql.connector
+import google.genai
 import pymysql
 import pymysql.cursors
+from PIL import Image
 
 # Configure logging to Google Cloud Logging
 logging_client = google.cloud.logging.Client()
@@ -49,15 +52,15 @@ class SimpleArticle:
     id: int
     title: str
     content: str
+    thumbnail_url: str
 
     @classmethod
     def from_dict(cls, response: dict[str, Any]) -> 'SimpleArticle':
         """Create a SimpleArticle instance from a database row."""
-        return cls(
-            id=response['id'],
-            title=response['title'],
-            content=response['content'],
-        )
+        return cls(id=response['id'],
+                   title=response['title'],
+                   content=response['content'],
+                   thumbnail_url=response['thumbnail_url'])
 
 
 @dataclasses.dataclass
@@ -69,19 +72,19 @@ class ProcessedArticle:
     full_summary: str
     language: str
     section: str
+    thumbnail_url: str
     region: Optional[str] = None
 
     @classmethod
     def from_dict(cls, response: dict[Any, Any]) -> 'ProcessedArticle':
         """Create a ProcessedArticle instance from a database row."""
-        return cls(
-            title=response['title'],
-            one_line_summary=response['one_line_summary'],
-            full_summary=response['full_summary'],
-            language=response['language'],
-            section=response['section'],
-            region=response.get('region'),
-        )
+        return cls(title=response['title'],
+                   one_line_summary=response['one_line_summary'],
+                   full_summary=response['full_summary'],
+                   language=response['language'],
+                   section=response['section'],
+                   region=response.get('region'),
+                   thumbnail_url=response['thumbnail_url'])
 
 
 @dataclasses.dataclass
@@ -102,6 +105,40 @@ class AiResponse:
             full_summary=response['full_summary'],
             section=response['section'],
         )
+
+
+class ImageClient:
+
+    def __init__(self):
+        pass
+
+    def _get_image_size(self, url):
+        try:
+            response = urllib.request.urlopen(url)
+            img = Image.open(io.BytesIO(response.read()))
+            width, height = img.size
+            return (width, height)
+        except Exception as e:
+            print(f"Error loading {url}: {e}")
+            return (0, 0)
+
+    def get_highest_resolution_image(
+        self,
+        image_urls: list[str],
+    ) -> Optional[str]:
+        if not image_urls:
+            raise ValueError("Image URLs list cannot be empty")
+
+        max_resolution = 0
+        best_url = None
+        for url in image_urls:
+            width, height = self._get_image_size(url)
+            resolution = width * height
+            if resolution > max_resolution:
+                max_resolution = resolution
+                best_url = url
+
+        return best_url
 
 
 class DatabaseClient:
@@ -151,7 +188,7 @@ class DatabaseClient:
                 with connection.cursor(pymysql.cursors.DictCursor) as cursor:
                     placeholders = ', '.join(['%s'] * len(article_ids))
                     query = f"""
-                        SELECT id, title, content
+                        SELECT id, title, content, thumbnail_url
                         FROM article
                         WHERE id IN ({placeholders})
                     """
@@ -241,8 +278,8 @@ class DatabaseClient:
 
                     # Insert processed article
                     insert_sql = """
-                        INSERT INTO processed_article (title, one_line_summary, full_summary, language, region, section_id)
-                        VALUES (%s, %s, %s, %s, %s, %s)
+                        INSERT INTO processed_article (title, one_line_summary, full_summary, language, region, section_id, thumbnail_url)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
                     """
                     cursor.execute(insert_sql, (
                         article.title,
@@ -251,6 +288,7 @@ class DatabaseClient:
                         article.language,
                         article.region,
                         section_id,
+                        articles[0].thumbnail_url,
                     ))
 
                     new_processed_id = cursor.lastrowid
@@ -261,7 +299,8 @@ class DatabaseClient:
                     placeholders = ', '.join(['%s'] * len(articles))
                     update_sql = f"""
                         UPDATE article
-                        SET processed_id = %s
+                        SET processed_id = %s,
+                            is_processed = TRUE
                         WHERE id IN ({placeholders})
                     """
                     cursor.execute(
@@ -286,35 +325,6 @@ class DatabaseClient:
                 "Error in transaction (processed article + references update): %s",
                 e)
             # Connection will be automatically rolled back when context exits
-            raise
-
-    def save_processed_article(self, article: ProcessedArticle) -> int:
-        """Save a processed article to the database and return its ID."""
-        try:
-            with self._get_connection() as connection:
-                with connection.cursor() as cursor:
-                    insert_sql = """
-                        INSERT INTO processed_article (title, one_line_summary, full_summary, language, region, section)
-                        VALUES (%s, %s, %s, %s, %s, %s)
-                    """
-                    cursor.execute(insert_sql, (
-                        article.title,
-                        article.one_line_summary,
-                        article.full_summary,
-                        article.language,
-                        article.region,
-                        article.section,
-                    ))
-
-                    new_processed_id = cursor.lastrowid
-                    logger.info("Processed article saved with ID: %s",
-                                new_processed_id)
-
-                connection.commit()
-                return new_processed_id
-
-        except Exception as e:
-            logger.error("Error saving processed article: %s", e)
             raise
 
     def update_article_references(self, articles: list[SimpleArticle],
@@ -473,6 +483,8 @@ class ArticleSummarizer:
             location=config.VERTEX_AI_REGION,
         )
 
+        self._image_client = ImageClient()
+
     def process_articles(self, article_ids: list[int]) -> tuple[str, int]:
         """Process articles by generating summaries and saving to database."""
         if not article_ids:
@@ -491,6 +503,10 @@ class ArticleSummarizer:
         contents = [article.content for article in articles]
         ai_response = self.ai_client.generate_summary(titles, contents)
 
+        # Determine the best thumbnail URL by resolution
+        best_thumbnail_url = self._image_client.get_highest_resolution_image(
+            [article.thumbnail_url for article in articles])
+
         # Create processed article
         processed_article = ProcessedArticle(
             title=ai_response.title,
@@ -498,6 +514,7 @@ class ArticleSummarizer:
             full_summary=ai_response.full_summary,
             language="ko",  # TODO: Determine language dynamically if needed
             section=ai_response.section,
+            thumbnail_url=best_thumbnail_url or articles[0].thumbnail_url,
             region=None,  # TODO: Find a good way to determine region
         )
 
