@@ -1,14 +1,14 @@
-import { requestPhoneAuth, verifyPhoneAuth, refreshAccessToken } from '../authController'
+import { requestPhoneAuth, verifyPhoneAuth, refreshAccessToken, guestLogin } from '../authController'
 import { success, errors } from '../../utils/response'
 import { authService, CodeDoesnotExistError, RefreshTokenNotFoundError } from '../../services/authService'
 import { userService } from '../../services/userService'
-import { generateRandomNickname } from '../../utils/nickname'
+import { generateGuestPhoneNumber, generateRandomNickname } from '../../utils/generate'
 import { verifyRefreshToken } from '../../config/jwt'
 
 jest.mock('../../utils/response')
 jest.mock('../../services/authService')
 jest.mock('../../services/userService')
-jest.mock('../../utils/nickname')
+jest.mock('../../utils/generate')
 jest.mock('../../config/jwt')
 
 const mockReq = (body: any = {}) => ({ body }) as any
@@ -148,6 +148,50 @@ describe('verifyPhoneAuth', () => {
     const res = mockRes()
 
     await verifyPhoneAuth(req, res)
+
+    expect(errors.internal).toHaveBeenCalledWith(res)
+  })
+})
+
+describe('guestLogin', () => {
+  it('should create a new user with random phone number and nickname', async () => {
+    ;(generateGuestPhoneNumber as jest.Mock).mockReturnValue('GUEST-1')
+    ;(generateRandomNickname as jest.Mock).mockResolvedValue('랜덤닉네임')
+    ;(userService.createUser as jest.Mock).mockResolvedValue({ id: 1, phone: 'GUEST-1', nickname: '랜덤닉네임' })
+    ;(authService.generateTokens as jest.Mock).mockResolvedValue({ accessToken: 'A', refreshToken: 'R' })
+
+    const req = mockReq({})
+    const res = mockRes()
+
+    await guestLogin(req, res)
+
+    expect(generateRandomNickname).toHaveBeenCalled()
+    expect(userService.createUser).toHaveBeenCalledWith('GUEST-1', '랜덤닉네임', false)
+    expect(authService.generateTokens).toHaveBeenCalledWith(1)
+    expect(success).toHaveBeenCalledWith(
+      res,
+      {
+        user: { id: 1, phone: 'GUEST-1', nickname: '랜덤닉네임' },
+        tokens: { accessToken: 'A', refreshToken: 'R' },
+        isCreated: true,
+      },
+      {
+        message: 'Guest login successful',
+      },
+    )
+  })
+
+  it('should return internal server error on unexpected error', async () => {
+    ;(generateGuestPhoneNumber as jest.Mock).mockReturnValue('GUEST-1')
+    ;(generateRandomNickname as jest.Mock).mockResolvedValue('랜덤닉네임')
+    ;(userService.createUser as jest.Mock).mockImplementation(() => {
+      throw new Error('Unexpected error')
+    })
+
+    const req = mockReq({})
+    const res = mockRes()
+
+    await guestLogin(req, res)
 
     expect(errors.internal).toHaveBeenCalledWith(res)
   })

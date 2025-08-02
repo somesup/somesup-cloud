@@ -26,3 +26,11 @@ export const generateRandomNickname = async (): Promise<string> => {
 
   return `${nickname} #${idx}`
 }
+
+export const generateGuestPhoneNumber = async (): Promise<string> => {
+  // Redis에 guest_index 키를 incr하여 고유한 번호 생성
+  const idx = await redisClient.incr('guest_index')
+  const phoneNumber = `GUEST-${String(idx)}`
+
+  return phoneNumber
+}
