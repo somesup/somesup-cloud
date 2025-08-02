@@ -25,6 +25,7 @@ main:
                     url: $${url}
                     auth:
                       type: OIDC
+                      audience: $${text.split(url, "?")[0]}
                   result: fetch_result
 
     - cluster_fetched_articles:

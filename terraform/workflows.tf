@@ -1,3 +1,7 @@
+locals {
+  NUM_ARTICLES_PER_SOURCE = 10
+}
+
 resource "google_cloud_tasks_queue" "summary_queue" {
   project  = var.project
   location = var.region
@@ -56,8 +60,32 @@ resource "google_workflows_workflow" "article_processing" {
     WORKFLOW_SERVICE_ACCOUNT = google_service_account.workflow_service_account.email
 
     FETCHER_URLS = jsonencode([
-      module.guardian_fetcher.function_url,
-      module.newsapi_fetcher.function_url,
+      # 한국 뉴스 - 진보
+      "${module.newsapi_fetcher.function_url}?source_uri=khan.co.kr&num_articles=${local.NUM_ARTICLES_PER_SOURCE}",
+      "${module.newsapi_fetcher.function_url}?source_uri=ohmynews.com&num_articles=${local.NUM_ARTICLES_PER_SOURCE}",
+
+      # 한국 뉴스 - 중도
+      "${module.newsapi_fetcher.function_url}?source_uri=ytn.co.kr&num_articles=${local.NUM_ARTICLES_PER_SOURCE}",
+
+      # 한국 뉴스 - 보수
+      "${module.newsapi_fetcher.function_url}?source_uri=donga.com&num_articles=${local.NUM_ARTICLES_PER_SOURCE}",
+      "${module.newsapi_fetcher.function_url}?source_uri=joongang.co.kr&num_articles=${local.NUM_ARTICLES_PER_SOURCE}",
+      "${module.newsapi_fetcher.function_url}?source_uri=chosun.com&num_articles=${local.NUM_ARTICLES_PER_SOURCE}",
+      "${module.newsapi_fetcher.function_url}?source_uri=kmib.co.kr&num_articles=${local.NUM_ARTICLES_PER_SOURCE}",
+
+      # 국제 뉴스 - 진보
+      "${module.guardian_fetcher.function_url}?num_articles=${local.NUM_ARTICLES_PER_SOURCE}",
+      "${module.newsapi_fetcher.function_url}?source_uri=apnews.com&num_articles=${local.NUM_ARTICLES_PER_SOURCE}",
+
+      # 국제 뉴스 - 중도
+      "${module.newsapi_fetcher.function_url}?source_uri=bbc.com&num_articles=${local.NUM_ARTICLES_PER_SOURCE}",
+      "${module.newsapi_fetcher.function_url}?source_uri=reuters.com&num_articles=${local.NUM_ARTICLES_PER_SOURCE}",
+
+      # 국제 뉴스 - 보수
+      "${module.newsapi_fetcher.function_url}?source_uri=foxnews.com&num_articles=${local.NUM_ARTICLES_PER_SOURCE}",
+      "${module.newsapi_fetcher.function_url}?source_uri=wsj.com&num_articles=${local.NUM_ARTICLES_PER_SOURCE}",
+      "${module.newsapi_fetcher.function_url}?source_uri=dailymail.co.uk&num_articles=${local.NUM_ARTICLES_PER_SOURCE}",
+      "${module.newsapi_fetcher.function_url}?source_uri=breitbart.com&num_articles=${local.NUM_ARTICLES_PER_SOURCE}",
     ])
   })
 
