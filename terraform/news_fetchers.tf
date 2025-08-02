@@ -66,6 +66,7 @@ module "clustering_articles" {
   runtime             = "python313"
   available_memory_mb = "512Mi"
   entry_point         = "main"
+  timeout             = 60 * 20 # 20 minutes
   environment_variables = {
     PROJECT_ID               = var.project
     LOCATION                 = var.region

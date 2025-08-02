@@ -43,6 +43,7 @@ model ProcessedArticle {
   full_summary     String   @db.Text
   language         String   @db.VarChar(30)
   region           String?  @db.VarChar(30)
+  thumbnail_url    String   @db.Text
   created_at       DateTime @default(now())
 
   articles Article[]
@@ -63,7 +64,7 @@ model Article {
   content       String   @db.Text
   language      String   @db.VarChar(30)
   region        String?  @db.VarChar(30)
-  thumbnail_url String
+  thumbnail_url String   @db.Text
   news_url      String
   is_processed  Boolean  @default(false)
   created_at    DateTime @default(now())
