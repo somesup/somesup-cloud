@@ -33,7 +33,6 @@ class Config:
         MYSQL_PASSWORD: MySQL database password for authentication.
         MYSQL_DATABASE: Name of the MySQL database to connect to.
         DEFAULT_NUM_ARTICLES: Default number of articles to fetch per request.
-        DEFAULT_SOURCE_RANK_PERCENTILE: Default source ranking percentile threshold.
     """
 
     NEWSAPI_API_KEY = os.getenv("NEWSAPI_API_KEY", '')
@@ -44,7 +43,6 @@ class Config:
     MYSQL_DATABASE = 'somesup'
 
     DEFAULT_NUM_ARTICLES = 5
-    DEFAULT_SOURCE_RANK_PERCENTILE = 10
 
     def validate(self) -> None:
         """Validates that all required configuration values are set.
@@ -137,16 +135,16 @@ class NewsApiClient:
         self,
         start_date: str,
         end_date: str,
-        source_rank_percentile: int,
         num_articles: int,
+        source_uri: Optional[str],
     ) -> list[Article]:
         """Fetches articles from the News API within the specified date range.
         
         Args:
             start_date: Start date for article search in ISO format (YYYY-MM-DD).
             end_date: End date for article search in ISO format (YYYY-MM-DD).
-            source_rank_percentile: Maximum source ranking percentile to include.
             num_articles: Maximum number of articles to retrieve.
+            source_uri: Optional URI of the news source to filter articles by.
         
         Returns:
             List of Article objects containing the fetched news articles.
@@ -154,15 +152,19 @@ class NewsApiClient:
         """
         query = {
             "$query": {
-                "dateStart": start_date,
-                "dateEnd": end_date,
-                "lang": "eng"  # Fix language to English
-            },
-            "$filter": {
-                "startSourceRankPercentile": 0,
-                "endSourceRankPercentile": source_rank_percentile,
+                "$and": [
+                    {
+                        "dateStart": start_date,
+                        "dateEnd": end_date,
+                    },
+                ],
             }
         }
+        if source_uri is not None:
+            query["$query"]["$and"].append({
+                "sourceUri": source_uri,
+            })
+
         q = eventregistry.QueryArticlesIter.initWithComplexQuery(query)
         raw_articles = q.execQuery(self._er, maxItems=num_articles)
 
@@ -365,7 +367,7 @@ class NewsFetcher:
         fromt_date: datetime.date,
         to_date: datetime.date,
         num_articles: int,
-        source_rank_percentile: int,
+        source_uri: Optional[str],
     ) -> tuple[int, int]:
         """Fetches articles from API and stores them in the database.
         
@@ -388,7 +390,7 @@ class NewsFetcher:
             start_date=fromt_date.isoformat(),
             end_date=to_date.isoformat(),
             num_articles=num_articles,
-            source_rank_percentile=source_rank_percentile,
+            source_uri=source_uri,
         )
 
         if not articles:
@@ -460,9 +462,7 @@ def main(request) -> dict[str, Any]:
     # Parse query parameters with defaults
     num_articles = int(
         request.args.get('num_articles', Config.DEFAULT_NUM_ARTICLES))
-    source_rank_percentile = int(
-        request.args.get('source_rank_percentile',
-                         Config.DEFAULT_SOURCE_RANK_PERCENTILE))
+    source_uri = request.args.get('source_uri', None)
 
     newsapi_client = NewsApiClient(config.NEWSAPI_API_KEY)
     db_client = DatabaseClient(
@@ -480,7 +480,7 @@ def main(request) -> dict[str, Any]:
         fromt_date=from_date,
         to_date=to_date,
         num_articles=num_articles,
-        source_rank_percentile=source_rank_percentile,
+        source_uri=source_uri,
     )
 
     return {
