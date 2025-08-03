@@ -222,9 +222,10 @@ describe('updateUserSectionPreferences', () => {
 
   it('should update user section preferences', async () => {
     const preferences = [{ sectionId: 1, preference: 1 }]
-    const updatedPrefs = [{ sectionId: 1, preference: 1 }]
+    const updatedPrefs = [{ userId: 1, sectionId: 1, sectionName: 'politics', preference: 1 }]
 
-    ;(userService.updateUserSectionPreferences as jest.Mock).mockResolvedValue(updatedPrefs)
+    userService.updateUserSectionPreferences as jest.Mock
+    ;(sectionService.getSectionPreferencesByUserId as jest.Mock).mockResolvedValue(updatedPrefs)
 
     const req = {
       userId: 1,

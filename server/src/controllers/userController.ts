@@ -126,7 +126,9 @@ export const updateUserSectionPreferences = async (req: AuthenticatedRequest, re
       return errors.badRequest(res, 'Invalid request body, please check body format')
     }
 
-    const updatedPrefs = await userService.updateUserSectionPreferences(userId, parsed.data)
+    await userService.updateUserSectionPreferences(userId, parsed.data)
+
+    const updatedPrefs = await sectionService.getSectionPreferencesByUserId(userId)
     return success(res, updatedPrefs, {
       message: 'User section preferences updated successfully',
     })

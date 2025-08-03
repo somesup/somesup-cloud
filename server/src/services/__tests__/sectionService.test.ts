@@ -93,8 +93,8 @@ describe('getSectionPreferencesByUserId', () => {
       include: { section: true },
     })
     expect(result).toEqual([
-      { user_id: 1, section_id: 1, preference: 1, section_name: 'politics' },
-      { user_id: 1, section_id: 2, preference: 1, section_name: 'economy' },
+      { userId: 1, sectionId: 1, sectionName: 'politics', preference: 1 },
+      { userId: 1, sectionId: 2, sectionName: 'economy', preference: 1 },
     ])
   })
 })

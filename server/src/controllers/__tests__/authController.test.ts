@@ -193,6 +193,10 @@ describe('guestLogin', () => {
     ;(generateRandomNickname as jest.Mock).mockResolvedValue('랜덤닉네임')
     ;(userService.createUser as jest.Mock).mockResolvedValue({ id: 1, phone: 'GUEST-1', nickname: '랜덤닉네임' })
     ;(authService.generateTokens as jest.Mock).mockResolvedValue({ accessToken: 'A', refreshToken: 'R' })
+    sectionService.createDefaultSectionPreferences as jest.Mock
+    ;(sectionService.getSectionPreferencesByUserId as jest.Mock).mockResolvedValue([
+      { userId: 1, sectionId: 1, sectionName: 'politics', preference: 1 },
+    ])
 
     const req = mockReq({})
     const res = mockRes()
@@ -208,6 +212,7 @@ describe('guestLogin', () => {
         user: { id: 1, phone: 'GUEST-1', nickname: '랜덤닉네임' },
         tokens: { accessToken: 'A', refreshToken: 'R' },
         isCreated: true,
+        sectionPreferences: [{ userId: 1, sectionId: 1, sectionName: 'politics', preference: 1 }],
       },
       {
         message: 'Guest login successful',

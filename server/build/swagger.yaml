@@ -88,6 +88,11 @@ paths:
                         accessToken: <access_token>
                         refreshToken: <refresh_token>
                       isCreated: true
+                      sectionPreferences:
+                        - userId: 1
+                          sectionId: 1
+                          sectionName: politics
+                          preference: 1
                     message: Phone verification successful
                 successWithExistingUser:
                   summary: 기존 사용자 인증 성공
@@ -177,6 +182,11 @@ paths:
                         accessToken: <access_token>
                         refreshToken: <refresh_token>
                       isCreated: true
+                      sectionPreferences:
+                        - userId: 1
+                          sectionId: 1
+                          sectionName: politics
+                          preference: 1
                     message: Guest login successful
         '500':
           description: 서버 오류
@@ -616,6 +626,10 @@ components:
             isCreated:
               type: boolean
               example: true
+            sectionPreferences:
+              type: array
+              items:
+                $ref: '#/components/schemas/UserSectionPreferences'
         message:
           type: string
           example: Phone verification successful
@@ -794,10 +808,13 @@ components:
           example: 1
         sectionId:
           type: integer
-          example: 2
-        preferences:
+          example: 1
+        sectionName:
+          type: string
+          example: politics
+        preference:
           type: integer
-          example: 2
+          example: 1
     UserSectionPreferencesResponse:
       type: object
       properties:

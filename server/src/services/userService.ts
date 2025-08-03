@@ -1,7 +1,9 @@
 import { prisma } from '../../prisma/prisma'
-import { User, UserArticleSectionPreference } from '@prisma/client'
-import { UpdateUserRequest, UserSectionPreference } from '../types/user'
+import { User } from '@prisma/client'
+import { UpdateUserRequest, UpdateUserSectionPreferenceRequest } from '../types/user'
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
+import { UserSectionPreference } from '../types/section'
+import { sectionService } from './sectionService'
 
 export class UserNotFoundError extends Error {
   constructor(message: string) {
@@ -124,13 +126,13 @@ export const userService = {
    * 이 작업은 병렬로 실행되어 성능을 최적화합니다.
    * @param {number} userId - 섹션 선호도를 업데이트할 사용자의 ID
    * @param {UserSectionPreference[]} preferences - 업데이트할 섹션 선호도 배열
-   * @returns {Promise<UserArticleSectionPreference[]>} 업데이트된 사용자 섹션 선호도 배열
+   * @returns {Promise<void>} 업데이트된 사용자 섹션 선호도 배열
    * @throws {Error} - 섹션 선호도 업데이트 실패 시 오류 발생
    */
   updateUserSectionPreferences: async (
     userId: number,
-    preferences: UserSectionPreference[],
-  ): Promise<UserArticleSectionPreference[]> => {
+    preferences: UpdateUserSectionPreferenceRequest[],
+  ): Promise<void> => {
     try {
       // 중복된 sectionId를 제거하고 유효한 sectionId만 필터링합니다.
       const sectionIds = [...new Set(preferences.map((pref) => pref.sectionId))]
@@ -164,11 +166,6 @@ export const userService = {
 
       // 모든 upsert 작업을 병렬로 실행합니다.
       await Promise.all(upsertPromises)
-
-      // 업데이트된 사용자 섹션 선호도를 반환합니다.
-      return prisma.userArticleSectionPreference.findMany({
-        where: { user_id: userId },
-      })
     } catch (error) {
       throw new Error('Failed to update user section preferences')
     }

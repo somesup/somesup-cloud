@@ -136,6 +136,7 @@ export const guestLogin = async (req: Request, res: Response) => {
       },
       tokens,
       isCreated: true,
+      sectionPreferences,
     }
 
     return success(res, userData, {

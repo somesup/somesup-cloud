@@ -2,7 +2,7 @@ import { UserNotFoundError, userService } from '../userService'
 import { prismaMock } from '../../../prisma/mock'
 import { User, ArticleSection } from '@prisma/client'
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
-import { UserSectionPreference } from '../../types/user'
+import { UpdateUserSectionPreferenceRequest, UserSectionPreference } from '../../types/user'
 
 describe('userService', () => {
   const mockUser: User = {
@@ -142,7 +142,7 @@ describe('userService', () => {
 
   describe('updateUserSectionPreferences', () => {
     it('should upsert user section preferences and return updated preferences', async () => {
-      const preferences: UserSectionPreference[] = [
+      const preferences: UpdateUserSectionPreferenceRequest[] = [
         { sectionId: 1, preference: 1 },
         { sectionId: 2, preference: 2 },
       ]
@@ -187,10 +187,6 @@ describe('userService', () => {
           section_id: 2,
           preference: 2,
         },
-      })
-
-      expect(prismaMock.userArticleSectionPreference.findMany).toHaveBeenCalledWith({
-        where: { user_id: 1 },
       })
     })
 
