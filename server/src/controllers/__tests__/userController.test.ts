@@ -1,11 +1,13 @@
-import { updateNickname, updateUser, updateUserSectionPreferences } from '../userController'
+import { getUserSectionPreferences, updateNickname, updateUser, updateUserSectionPreferences } from '../userController'
 import { errors, success } from '../../utils/response'
 import { UserNotFoundError, userService } from '../../services/userService'
 import { AuthenticatedRequest } from '../../middlewares/authenticateJWT'
 import { Response } from 'express'
+import { sectionService } from '../../services/sectionService'
 
 jest.mock('../../utils/response')
-jest.mock('../..//services/userService')
+jest.mock('../../services/userService')
+jest.mock('../../services/sectionService')
 
 const mockRes = () => {
   const res: Partial<Response> = {
@@ -250,6 +252,53 @@ describe('updateUserSectionPreferences', () => {
     ;(userService.updateUserSectionPreferences as jest.Mock).mockRejectedValue(new Error('Unexpected error'))
 
     await updateUserSectionPreferences(req, res)
+
+    expect(errors.internal).toHaveBeenCalledWith(res)
+  })
+})
+
+describe('getUserSectionPreferences', () => {
+  it('should return unauthorized if userId is missing', async () => {
+    const req = {
+      userId: undefined,
+    } as unknown as AuthenticatedRequest
+
+    const res = mockRes()
+
+    await getUserSectionPreferences(req, res)
+
+    expect(errors.unauthorized).toHaveBeenCalledWith(res, 'User ID is required')
+  })
+
+  it('should return user section preferences', async () => {
+    const req = {
+      userId: 1,
+    } as AuthenticatedRequest
+
+    const preferences = [{ user_id: 1, section_id: 1, preference: 1, section_name: 'politics' }]
+
+    ;(sectionService.getSectionPreferencesByUserId as jest.Mock).mockResolvedValue(preferences)
+
+    const res = mockRes()
+
+    await getUserSectionPreferences(req, res)
+
+    expect(sectionService.getSectionPreferencesByUserId).toHaveBeenCalledWith(1)
+    expect(success).toHaveBeenCalledWith(res, preferences, {
+      message: 'User section preferences retrieved successfully',
+    })
+  })
+
+  it('should return internal error on unexpected error', async () => {
+    const req = {
+      userId: 1,
+    } as unknown as AuthenticatedRequest
+
+    const res = mockRes()
+
+    ;(sectionService.getSectionPreferencesByUserId as jest.Mock).mockRejectedValue(new Error('Unexpected error'))
+
+    await getUserSectionPreferences(req, res)
 
     expect(errors.internal).toHaveBeenCalledWith(res)
   })
