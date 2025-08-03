@@ -1,4 +1,4 @@
-import { ArticleSection } from '@prisma/client'
+import { ArticleSection, UserArticleSectionPreference } from '@prisma/client'
 import { prisma } from '../../prisma/prisma'
 
 /**
@@ -47,5 +47,47 @@ export const sectionService = {
     }
 
     return section
+  },
+
+  /**
+   * 사용자의 섹션 선호도를 업데이트합니다.
+   * @param {number} userId - 사용자의 ID
+   * @returns {Promise<void>} - 업데이트된 섹션 선호도
+   */
+  createDefaultSectionPreferences: async (userId: number): Promise<void> => {
+    const sections = await prisma.articleSection.findMany()
+    const defaultSectionPrefs = sections.map((section) => ({
+      section_id: section.id,
+    }))
+
+    await prisma.userArticleSectionPreference.createMany({
+      data: defaultSectionPrefs.map((pref) => ({
+        user_id: userId,
+        section_id: pref.section_id,
+        preference: 1, // 기본 선호도는 1로 설정
+      })),
+    })
+  },
+
+  /**
+   * 사용자의 섹션 선호도를 업데이트합니다.
+   * @param {number} userId - 사용자의 ID
+   * @returns {Promise<UserArticleSectionPreference[]>} - 업데이트된 사용자 섹션 선호도 배열
+   */
+  getSectionPreferencesByUserId: async (userId: number): Promise<UserArticleSectionPreference[]> => {
+    const preferences = await prisma.userArticleSectionPreference.findMany({
+      where: { user_id: userId },
+      include: {
+        section: true,
+      },
+    })
+
+    return preferences.map((pref) => {
+      const { section, ...rest } = pref
+      return {
+        ...rest,
+        section_name: section.name,
+      }
+    })
   },
 }

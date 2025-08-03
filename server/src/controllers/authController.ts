@@ -4,6 +4,7 @@ import { authService, CodeDoesnotExistError, RefreshTokenNotFoundError } from '.
 import { userService } from '../services/userService'
 import { generateGuestPhoneNumber, generateRandomNickname } from '../utils/generate'
 import { verifyRefreshToken } from '../config/jwt'
+import { sectionService } from '../services/sectionService'
 
 /**
  * 휴대폰 번호로 인증을 요청하는 컨트롤러입니다.
@@ -70,11 +71,16 @@ export const verifyPhoneAuth = async (req: Request, res: Response) => {
     let isCreated: Boolean = false
     if (!user) {
       const nickname = await generateRandomNickname()
+      // 새로운 사용자를 생성합니다.
       user = await userService.createUser(phoneNumber, nickname, true)
+      // 기본 섹션 선호도를 생성합니다.
+      await sectionService.createDefaultSectionPreferences(user.id)
+      // 사용자가 새로 생성되었음을 표시합니다.
       isCreated = true
     }
 
     const tokens = await authService.generateTokens(user.id)
+    const sectionPreferences = await sectionService.getSectionPreferencesByUserId(user.id)
 
     const userData = {
       user: {
@@ -84,6 +90,7 @@ export const verifyPhoneAuth = async (req: Request, res: Response) => {
       },
       tokens,
       isCreated,
+      sectionPreferences,
     }
 
     return success(res, userData, {
@@ -113,9 +120,13 @@ export const guestLogin = async (req: Request, res: Response) => {
   try {
     const phoneNumber = await generateGuestPhoneNumber()
     const nickname = await generateRandomNickname()
+    // 게스트 사용자를 생성합니다.
     const user = await userService.createUser(phoneNumber, nickname, false)
+    // 기본 섹션 선호도를 생성합니다.
+    await sectionService.createDefaultSectionPreferences(user.id)
 
     const tokens = await authService.generateTokens(user.id)
+    const sectionPreferences = await sectionService.getSectionPreferencesByUserId(user.id)
 
     const userData = {
       user: {
