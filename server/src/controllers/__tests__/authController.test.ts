@@ -4,10 +4,12 @@ import { authService, CodeDoesnotExistError, RefreshTokenNotFoundError } from '.
 import { userService } from '../../services/userService'
 import { generateGuestPhoneNumber, generateRandomNickname } from '../../utils/generate'
 import { verifyRefreshToken } from '../../config/jwt'
+import { sectionService } from '../../services/sectionService'
 
 jest.mock('../../utils/response')
 jest.mock('../../services/authService')
 jest.mock('../../services/userService')
+jest.mock('../../services/sectionService')
 jest.mock('../../utils/generate')
 jest.mock('../../config/jwt')
 
@@ -83,6 +85,14 @@ describe('verifyPhoneAuth', () => {
     ;(authService.verifyPhoneCode as jest.Mock).mockResolvedValue(true)
     ;(userService.findUserByPhone as jest.Mock).mockResolvedValue({ id: 1, phone: '010', nickname: '닉네임' })
     ;(authService.generateTokens as jest.Mock).mockResolvedValue({ accessToken: 'A', refreshToken: 'R' })
+    ;(sectionService.getSectionPreferencesByUserId as jest.Mock).mockResolvedValue([
+      { user_id: 1, section_id: 1, preference: 1, section_name: 'politics' },
+      { user_id: 1, section_id: 2, preference: 1, section_name: 'economy' },
+      { user_id: 1, section_id: 3, preference: 1, section_name: 'society' },
+      { user_id: 1, section_id: 4, preference: 1, section_name: 'culture' },
+      { user_id: 1, section_id: 5, preference: 1, section_name: 'tech' },
+      { user_id: 1, section_id: 6, preference: 1, section_name: 'world' },
+    ])
 
     const req = mockReq({ phoneNumber: '010', code: '123' })
     const res = mockRes()
@@ -95,6 +105,14 @@ describe('verifyPhoneAuth', () => {
         user: { id: 1, phone: '010', nickname: '닉네임' },
         tokens: { accessToken: 'A', refreshToken: 'R' },
         isCreated: false,
+        sectionPreferences: [
+          { user_id: 1, section_id: 1, preference: 1, section_name: 'politics' },
+          { user_id: 1, section_id: 2, preference: 1, section_name: 'economy' },
+          { user_id: 1, section_id: 3, preference: 1, section_name: 'society' },
+          { user_id: 1, section_id: 4, preference: 1, section_name: 'culture' },
+          { user_id: 1, section_id: 5, preference: 1, section_name: 'tech' },
+          { user_id: 1, section_id: 6, preference: 1, section_name: 'world' },
+        ],
       },
       {
         message: 'Phone verification successful',
@@ -108,6 +126,14 @@ describe('verifyPhoneAuth', () => {
     ;(generateRandomNickname as jest.Mock).mockResolvedValue('랜덤닉네임')
     ;(userService.createUser as jest.Mock).mockResolvedValue({ id: 1, phone: '010', nickname: '랜덤닉네임' })
     ;(authService.generateTokens as jest.Mock).mockResolvedValue({ accessToken: 'A', refreshToken: 'R' })
+    ;(sectionService.createDefaultSectionPreferences as jest.Mock).mockResolvedValue([
+      { user_id: 1, section_id: 1, preference: 1, section_name: 'politics' },
+      { user_id: 1, section_id: 2, preference: 1, section_name: 'economy' },
+      { user_id: 1, section_id: 3, preference: 1, section_name: 'society' },
+      { user_id: 1, section_id: 4, preference: 1, section_name: 'culture' },
+      { user_id: 1, section_id: 5, preference: 1, section_name: 'tech' },
+      { user_id: 1, section_id: 6, preference: 1, section_name: 'world' },
+    ])
 
     const req = mockReq({ phoneNumber: '010', code: '123' })
     const res = mockRes()
@@ -121,6 +147,14 @@ describe('verifyPhoneAuth', () => {
         user: { id: 1, phone: '010', nickname: '랜덤닉네임' },
         tokens: { accessToken: 'A', refreshToken: 'R' },
         isCreated: true,
+        sectionPreferences: [
+          { user_id: 1, section_id: 1, preference: 1, section_name: 'politics' },
+          { user_id: 1, section_id: 2, preference: 1, section_name: 'economy' },
+          { user_id: 1, section_id: 3, preference: 1, section_name: 'society' },
+          { user_id: 1, section_id: 4, preference: 1, section_name: 'culture' },
+          { user_id: 1, section_id: 5, preference: 1, section_name: 'tech' },
+          { user_id: 1, section_id: 6, preference: 1, section_name: 'world' },
+        ],
       },
       {
         message: 'Phone verification successful',
@@ -159,6 +193,10 @@ describe('guestLogin', () => {
     ;(generateRandomNickname as jest.Mock).mockResolvedValue('랜덤닉네임')
     ;(userService.createUser as jest.Mock).mockResolvedValue({ id: 1, phone: 'GUEST-1', nickname: '랜덤닉네임' })
     ;(authService.generateTokens as jest.Mock).mockResolvedValue({ accessToken: 'A', refreshToken: 'R' })
+    sectionService.createDefaultSectionPreferences as jest.Mock
+    ;(sectionService.getSectionPreferencesByUserId as jest.Mock).mockResolvedValue([
+      { userId: 1, sectionId: 1, sectionName: 'politics', preference: 1 },
+    ])
 
     const req = mockReq({})
     const res = mockRes()
@@ -174,6 +212,7 @@ describe('guestLogin', () => {
         user: { id: 1, phone: 'GUEST-1', nickname: '랜덤닉네임' },
         tokens: { accessToken: 'A', refreshToken: 'R' },
         isCreated: true,
+        sectionPreferences: [{ userId: 1, sectionId: 1, sectionName: 'politics', preference: 1 }],
       },
       {
         message: 'Guest login successful',

@@ -1,5 +1,6 @@
 import { ArticleSection } from '@prisma/client'
 import { prisma } from '../../prisma/prisma'
+import { UserSectionPreference } from '../types/section'
 
 /**
  * 특정 섹션을 찾지 못했을 때 발생하는 오류 클래스입니다.
@@ -47,5 +48,46 @@ export const sectionService = {
     }
 
     return section
+  },
+
+  /**
+   * 사용자의 섹션 선호도를 업데이트합니다.
+   * @param {number} userId - 사용자의 ID
+   * @returns {Promise<void>} - 업데이트된 섹션 선호도
+   */
+  createDefaultSectionPreferences: async (userId: number): Promise<void> => {
+    const sections = await prisma.articleSection.findMany()
+    const defaultSectionPrefs = sections.map((section) => ({
+      section_id: section.id,
+    }))
+
+    await prisma.userArticleSectionPreference.createMany({
+      data: defaultSectionPrefs.map((pref) => ({
+        user_id: userId,
+        section_id: pref.section_id,
+        preference: 1, // 기본 선호도는 1로 설정
+      })),
+    })
+  },
+
+  /**
+   * 사용자의 섹션 선호도를 조회합니다.
+   * @param {number} userId - 사용자의 ID
+   * @returns {Promise<UserSectionPreference[]>} - 사용자의 섹션 선호도 배열
+   */
+  getSectionPreferencesByUserId: async (userId: number): Promise<UserSectionPreference[]> => {
+    const preferences = await prisma.userArticleSectionPreference.findMany({
+      where: { user_id: userId },
+      include: {
+        section: true,
+      },
+    })
+
+    return preferences.map((pref) => ({
+      userId: pref.user_id,
+      sectionId: pref.section_id,
+      sectionName: pref.section.name,
+      preference: pref.preference,
+    }))
   },
 }

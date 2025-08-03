@@ -47,3 +47,54 @@ describe('SectionService', () => {
     })
   })
 })
+
+describe('createDefaultSectionPreferences', () => {
+  it('should create default section preferences for user', async () => {
+    const mockSections = [
+      { id: 1, name: 'politics' },
+      { id: 2, name: 'economy' },
+    ]
+
+    ;(prismaMock.articleSection.findMany as jest.Mock).mockResolvedValue(mockSections)
+
+    await sectionService.createDefaultSectionPreferences(1)
+
+    expect(prismaMock.userArticleSectionPreference.createMany).toHaveBeenCalledWith({
+      data: [
+        { user_id: 1, section_id: 1, preference: 1 },
+        { user_id: 1, section_id: 2, preference: 1 },
+      ],
+    })
+  })
+})
+
+describe('getSectionPreferencesByUserId', () => {
+  it('should return section preferences for user', async () => {
+    const preferences = [
+      {
+        user_id: 1,
+        section_id: 1,
+        preference: 1,
+        section: { id: 1, name: 'politics' },
+      },
+      {
+        user_id: 1,
+        section_id: 2,
+        preference: 1,
+        section: { id: 2, name: 'economy' },
+      },
+    ]
+
+    ;(prismaMock.userArticleSectionPreference.findMany as jest.Mock).mockResolvedValue(preferences)
+
+    const result = await sectionService.getSectionPreferencesByUserId(1)
+    expect(prismaMock.userArticleSectionPreference.findMany).toHaveBeenCalledWith({
+      where: { user_id: 1 },
+      include: { section: true },
+    })
+    expect(result).toEqual([
+      { userId: 1, sectionId: 1, sectionName: 'politics', preference: 1 },
+      { userId: 1, sectionId: 2, sectionName: 'economy', preference: 1 },
+    ])
+  })
+})

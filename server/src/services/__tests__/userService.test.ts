@@ -2,7 +2,7 @@ import { UserNotFoundError, userService } from '../userService'
 import { prismaMock } from '../../../prisma/mock'
 import { User, ArticleSection } from '@prisma/client'
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
-import { UserSectionPreference } from '../../types/user'
+import { UpdateUserSectionPreferenceRequest } from '../../types/user'
 
 describe('userService', () => {
   const mockUser: User = {
@@ -60,7 +60,6 @@ describe('userService', () => {
     it('should create and return new user', async () => {
       const createdUser = { ...mockUser, id: 2 }
       ;(prismaMock.user.create as jest.Mock).mockResolvedValue(createdUser)
-      ;(prismaMock.articleSection.findMany as jest.Mock).mockResolvedValue([])
 
       const result = await userService.createUser('01087654321', '새유저', true)
 
@@ -69,42 +68,9 @@ describe('userService', () => {
           phone: '01087654321',
           nickname: '새유저',
           is_authenticated: true,
-          user_article_section_preference: {
-            create: [],
-          },
-        },
-        include: {
-          user_article_section_preference: true,
         },
       })
       expect(result).toEqual(createdUser)
-    })
-
-    it('should create default section preferences for new user', async () => {
-      const sections = [
-        { id: 1, name: 'politics' },
-        { id: 2, name: 'economy' },
-      ]
-      ;(prismaMock.articleSection.findMany as jest.Mock).mockResolvedValue(sections)
-
-      const createdUser = { ...mockUser, id: 2 }
-      ;(prismaMock.user.create as jest.Mock).mockResolvedValue(createdUser)
-
-      await userService.createUser('01087654321', '새유저', true)
-
-      expect(prismaMock.user.create).toHaveBeenCalledWith({
-        data: {
-          phone: '01087654321',
-          nickname: '새유저',
-          is_authenticated: true,
-          user_article_section_preference: {
-            create: sections.map((section) => ({ section_id: section.id })),
-          },
-        },
-        include: {
-          user_article_section_preference: true,
-        },
-      })
     })
   })
 
@@ -176,7 +142,7 @@ describe('userService', () => {
 
   describe('updateUserSectionPreferences', () => {
     it('should upsert user section preferences and return updated preferences', async () => {
-      const preferences: UserSectionPreference[] = [
+      const preferences: UpdateUserSectionPreferenceRequest[] = [
         { sectionId: 1, preference: 1 },
         { sectionId: 2, preference: 2 },
       ]
@@ -222,14 +188,10 @@ describe('userService', () => {
           preference: 2,
         },
       })
-
-      expect(prismaMock.userArticleSectionPreference.findMany).toHaveBeenCalledWith({
-        where: { user_id: 1 },
-      })
     })
 
     it('should handle errors during upsert', async () => {
-      const preferences: UserSectionPreference[] = [{ sectionId: 1, preference: 1 }]
+      const preferences: UpdateUserSectionPreferenceRequest[] = [{ sectionId: 1, preference: 1 }]
       const sections: ArticleSection[] = [{ id: 1, name: 'politics' }]
 
       ;(prismaMock.articleSection.findMany as jest.Mock).mockResolvedValue(sections)
