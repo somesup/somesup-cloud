@@ -2,7 +2,7 @@ import { UserNotFoundError, userService } from '../userService'
 import { prismaMock } from '../../../prisma/mock'
 import { User, ArticleSection } from '@prisma/client'
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
-import { UpdateUserSectionPreferenceRequest, UserSectionPreference } from '../../types/user'
+import { UpdateUserSectionPreferenceRequest } from '../../types/user'
 
 describe('userService', () => {
   const mockUser: User = {
@@ -191,7 +191,7 @@ describe('userService', () => {
     })
 
     it('should handle errors during upsert', async () => {
-      const preferences: UserSectionPreference[] = [{ sectionId: 1, preference: 1 }]
+      const preferences: UpdateUserSectionPreferenceRequest[] = [{ sectionId: 1, preference: 1 }]
       const sections: ArticleSection[] = [{ id: 1, name: 'politics' }]
 
       ;(prismaMock.articleSection.findMany as jest.Mock).mockResolvedValue(sections)

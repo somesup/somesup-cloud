@@ -41,6 +41,8 @@ export const requestPhoneAuth = async (req: Request, res: Response) => {
  * 휴대폰 번호로 인증 코드를 검증하는 컨트롤러입니다.
  * 사용자가 입력한 인증 코드가 올바른지 확인하고, 사용자 정보와 JWT 토큰을 반환합니다.
  * 사용자가 해당 번호로 인증을 받은 적이 없다면, 새로운 사용자를 생성하여 반환합니다.
+ * 새로운 사용자가 생성되면, 기본 섹션별 선호도를 생성합니다. (preference: 1)
+ * 응답에는 사용자 정보, JWT 토큰, 사용자가 새로 생성되었는지 여부(isCreated), 섹션 선호도 정보가 포함됩니다.
  *
  * @param {Request} req - Express 요청 객체. body에 phoneNumber와 code가 포함되어야 합니다.
  * @param {Response} res - Express 응답 객체.
@@ -107,7 +109,8 @@ export const verifyPhoneAuth = async (req: Request, res: Response) => {
 /**
  * 게스트 로그인 컨트롤러입니다.
  * 사용자가 게스트로 로그인할 때 호출되며, 임시 휴대폰 번호와 닉네임을 생성하여 새로운 사용자를 생성합니다.
- * 생성된 사용자 정보와 JWT 토큰을 반환합니다.
+ * 사용자가 새로 생성되면, 기본 섹션별 선호도를 생성합니다. (preference: 1)
+ * 생성된 사용자 정보, JWT 토큰, 섹션별 선호도를 반환합니다.
  *
  * @param {Request} req - Express 요청 객체.
  * @param {Response} res - Express 응답 객체.

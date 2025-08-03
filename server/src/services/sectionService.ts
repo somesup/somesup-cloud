@@ -71,9 +71,9 @@ export const sectionService = {
   },
 
   /**
-   * 사용자의 섹션 선호도를 업데이트합니다.
+   * 사용자의 섹션 선호도를 조회합니다.
    * @param {number} userId - 사용자의 ID
-   * @returns {Promise<UserSectionPreference[]>} - 업데이트된 사용자 섹션 선호도 배열
+   * @returns {Promise<UserSectionPreference[]>} - 사용자의 섹션 선호도 배열
    */
   getSectionPreferencesByUserId: async (userId: number): Promise<UserSectionPreference[]> => {
     const preferences = await prisma.userArticleSectionPreference.findMany({

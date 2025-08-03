@@ -2,8 +2,6 @@ import { prisma } from '../../prisma/prisma'
 import { User } from '@prisma/client'
 import { UpdateUserRequest, UpdateUserSectionPreferenceRequest } from '../types/user'
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
-import { UserSectionPreference } from '../types/section'
-import { sectionService } from './sectionService'
 
 export class UserNotFoundError extends Error {
   constructor(message: string) {
@@ -126,7 +124,7 @@ export const userService = {
    * 이 작업은 병렬로 실행되어 성능을 최적화합니다.
    * @param {number} userId - 섹션 선호도를 업데이트할 사용자의 ID
    * @param {UserSectionPreference[]} preferences - 업데이트할 섹션 선호도 배열
-   * @returns {Promise<void>} 업데이트된 사용자 섹션 선호도 배열
+   * @returns {Promise<void>} 업데이트 완료 후 반환되는 Promise
    * @throws {Error} - 섹션 선호도 업데이트 실패 시 오류 발생
    */
   updateUserSectionPreferences: async (
