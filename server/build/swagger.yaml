@@ -472,6 +472,51 @@ paths:
                   value:
                     success: false
                     message: Internal server error
+    get:
+      summary: 사용자 섹션 선호도 조회
+      description: 사용자의 섹션 선호도를 조회합니다.
+      responses:
+        '200':
+          description: 사용자 섹션 선호도 조회 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSectionPreferencesResponse'
+              examples:
+                success:
+                  summary: 사용자 섹션 선호도 조회 성공
+                  value:
+                    success: true
+                    data:
+                      - userId: 1
+                        sectionId: 1
+                        sectionName: politics
+                        preference: 1
+                    message: User section preferences retrieved successfully
+        '401':
+          description: 인증 실패 (토큰이 없거나 유효하지 않음)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                unauthorized:
+                  summary: 인증 실패
+                  value:
+                    success: false
+                    message: User ID is required
+        '500':
+          description: 서버 오류
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                serverError:
+                  summary: 서버 오류
+                  value:
+                    success: false
+                    message: Internal server error
   /sections:
     get:
       summary: 섹션 목록 조회
