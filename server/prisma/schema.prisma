@@ -51,7 +51,8 @@ model ProcessedArticle {
   likes    Like[]
   scraps   Scrap[]
 
-  section ArticleSection @relation(fields: [section_id], references: [id], onDelete: Cascade)
+  section          ArticleSection     @relation(fields: [section_id], references: [id], onDelete: Cascade)
+  ArticleViewEvent ArticleViewEvent[]
 
   @@map("processed_article")
 }
@@ -107,6 +108,7 @@ model User {
   likes                           Like[]
   scraps                          Scrap[]
   user_article_section_preference UserArticleSectionPreference[]
+  ArticleViewEvent                ArticleViewEvent[]
 
   @@map("user")
 }
@@ -159,4 +161,22 @@ model UserArticleSectionPreference {
 
   @@id([user_id, section_id])
   @@map("user_article_section_preference")
+}
+
+enum ArticleViewEventType {
+  VIEW // 일반 조회
+  DETAIL_VIEW // 상세 조회
+}
+
+model ArticleViewEvent {
+  id           Int                  @id @default(autoincrement())
+  user_id      Int
+  p_article_id Int
+  event_type   ArticleViewEventType
+  event_at     DateTime             @default(now())
+
+  user              User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  processed_article ProcessedArticle @relation(fields: [p_article_id], references: [id], onDelete: Cascade)
+
+  @@map("article_view_event")
 }

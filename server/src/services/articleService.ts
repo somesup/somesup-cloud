@@ -1,4 +1,4 @@
-import { ProcessedArticle } from '@prisma/client'
+import { ArticleViewEventType, ProcessedArticle } from '@prisma/client'
 import { prisma } from '../../prisma/prisma'
 import { createCursor, decodeCursor } from '../utils/cursor'
 import dayjs from 'dayjs'
@@ -95,5 +95,26 @@ export const articleService = {
     }
 
     return article
+  },
+
+  /**
+   * 특정 기사에 대한 사용자 이벤트를 저장합니다.
+   * 이 함수는 사용자가 특정 기사에 대해 어떤 이벤트를 발생시켰는지 기록합니다.
+   * @param userId - 이벤트를 발생시킨 사용자의 ID
+   * @param articleId - 이벤트가 발생한 기사의 ID
+   * @param eventType - 발생한 이벤트의 유형 (예: 'VIEW', 'DETAIL_VIEW' 등)
+   * @return Promise<void> - 이벤트 저장이 완료되면 반환되는 프로미스
+   * @example
+   * // 사용자 1이 기사 2에 대해 조회 이벤트를 저장
+   * storeArticleViewEvent(1, 2, 'VIEW')
+   */
+  storeArticleViewEvent: async (userId: number, articleId: number, eventType: ArticleViewEventType): Promise<void> => {
+    await prisma.articleViewEvent.create({
+      data: {
+        user_id: userId,
+        p_article_id: articleId,
+        event_type: eventType,
+      },
+    })
   },
 }

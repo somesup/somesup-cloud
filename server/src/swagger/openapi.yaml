@@ -368,10 +368,67 @@ paths:
                     success: false
                     message: Internal server error
 
+  /articles/view-events:
+    post:
+      summary: 기사 조회 이벤트 저장
+      description: 사용자가 기사를 조회했을 때 이벤트를 저장합니다. 헤더에 JWT 토큰을 포함해야 합니다. 현재 eventType은 "VIEW" 또는 "DETAIL_VIEW"만 허용됩니다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoreArticleViewEventRequest'
+
+      responses:
+        '200':
+          description: 이벤트 저장 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              examples:
+                success:
+                  summary: 이벤트 저장 성공
+                  value:
+                    success: true
+                    data: null
+                    message: Article view event stored successfully
+
+        '400':
+          description: 잘못된 요청 (필수 필드 누락 등)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidRequest:
+                  summary: 필수 필드 누락
+                  value:
+                    success: false
+                    message: articleId and eventType are required
+                invalidEventType:
+                  summary: 잘못된 이벤트 타입
+                  value:
+                    success: false
+                    message: Invalid eventType
+
+        '500':
+          description: 서버 오류
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                serverError:
+                  summary: 서버 오류
+                  value:
+                    success: false
+                    message: Internal server error
+
   /users:
     patch:
       summary: 사용자 정보 업데이트
-      description: 사용자의 정보를 업데이트 합니다. 현재는 닉네임만 업데이트 가능합니다.
+      description: 사용자의 정보를 업데이트 합니다. 현재는 닉네임만 업데이트 가능합니다. 헤더에 JWT 토큰을 포함해야 합니다.
       requestBody:
         required: true
         content:
@@ -448,7 +505,7 @@ paths:
   /users/section-preferences:
     patch:
       summary: 사용자 섹션 선호도 업데이트
-      description: 사용자의 섹션 선호도를 업데이트합니다.
+      description: 사용자의 섹션 선호도를 업데이트합니다. 헤더에 JWT 토큰을 포함해야 합니다.
       requestBody:
         required: true
         content:
@@ -504,7 +561,7 @@ paths:
 
     get:
       summary: 사용자 섹션 선호도 조회
-      description: 사용자의 섹션 선호도를 조회합니다.
+      description: 사용자의 섹션 선호도를 조회합니다. 헤더에 JWT 토큰을 포함해야 합니다.
       responses:
         '200':
           description: 사용자 섹션 선호도 조회 성공
@@ -697,6 +754,18 @@ components:
           type: string
           description: 사용자 닉네임
           example: '새로운 닉네임'
+
+    StoreArticleViewEventRequest:
+      type: object
+      properties:
+        articleId:
+          type: integer
+          description: 조회한 기사 ID
+          example: 1
+        eventType:
+          type: string
+          description: 이벤트 타입 ("VIEW" or "DETAIL_VIEW")
+          example: 'VIEW'
 
     PhoneVerifySuccessResponse:
       type: object

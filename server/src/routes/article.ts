@@ -1,5 +1,6 @@
 import { Router } from 'express'
-import { getArticles, getArticleById } from '../controllers/articleController'
+import { getArticles, getArticleById, storeArticleViewEvent } from '../controllers/articleController'
+import { authenticateJWT } from '../middlewares/authenticateJWT'
 
 const router = Router()
 
@@ -14,5 +15,11 @@ router.get('/', getArticles)
  * GET /:id
  */
 router.get('/:id', getArticleById)
+
+/**
+ * 기사 조회 이벤트 저장
+ * POST /view-events
+ */
+router.post('/view-events', authenticateJWT, storeArticleViewEvent)
 
 export default router

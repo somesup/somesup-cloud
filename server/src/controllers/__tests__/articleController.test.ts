@@ -1,4 +1,4 @@
-import { getArticles, getArticleById } from '../articleController'
+import { getArticles, getArticleById, storeArticleViewEvent } from '../articleController'
 import { ArticleNotFoundError, articleService } from '../../services/articleService'
 import { successWithCursor, success, errors } from '../../utils/response'
 
@@ -119,6 +119,63 @@ describe('articleController', () => {
       ;(articleService.getArticleById as jest.Mock).mockRejectedValue(new Error('err'))
       await getArticleById(req, res)
       expect(consoleErrorSpy).toHaveBeenCalledWith('Error retrieving article:', expect.any(Error))
+      expect(mockInternalError).toHaveBeenCalledWith(res)
+      expect(mockSuccess).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('storeArticleViewEvent', () => {
+    it('should store article view event and respond with success', async () => {
+      req.userId = 1
+      req.body = { articleId: 123, eventType: 'VIEW' }
+
+      await storeArticleViewEvent(req as any, res as any)
+
+      expect(articleService.storeArticleViewEvent).toHaveBeenCalledWith(1, 123, 'VIEW')
+      expect(mockSuccess).toHaveBeenCalledWith(res, null, {
+        message: 'Article view event stored successfully',
+      })
+    })
+
+    it('should return unauthorized if userId is missing', async () => {
+      req.userId = null
+      req.body = { articleId: 123, eventType: 'VIEW' }
+
+      await storeArticleViewEvent(req as any, res as any)
+
+      expect(errors.unauthorized).toHaveBeenCalledWith(res, 'User ID is required')
+      expect(mockSuccess).not.toHaveBeenCalled()
+    })
+
+    it('should return bad request if articleId or eventType is missing', async () => {
+      req.userId = 1
+      req.body = { articleId: null, eventType: 'VIEW' }
+
+      await storeArticleViewEvent(req as any, res as any)
+
+      expect(errors.badRequest).toHaveBeenCalledWith(res, 'articleId and eventType are required')
+      expect(mockSuccess).not.toHaveBeenCalled()
+    })
+
+    it('should return bad request if eventType is invalid', async () => {
+      req.userId = 1
+      req.body = { articleId: 123, eventType: 'INVALID_EVENT' }
+
+      await storeArticleViewEvent(req as any, res as any)
+
+      expect(errors.badRequest).toHaveBeenCalledWith(res, 'Invalid eventType')
+      expect(mockSuccess).not.toHaveBeenCalled()
+    })
+
+    it('should respond with internal error on service exception', async () => {
+      req.userId = 1
+      req.body = { articleId: 123, eventType: 'VIEW' }
+      const error = new Error('Service error')
+      ;(articleService.storeArticleViewEvent as jest.Mock).mockRejectedValue(error)
+
+      await storeArticleViewEvent(req as any, res as any)
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error storing article view event:', error)
       expect(mockInternalError).toHaveBeenCalledWith(res)
       expect(mockSuccess).not.toHaveBeenCalled()
     })
