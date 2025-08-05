@@ -1,6 +1,8 @@
 import { Request, Response } from 'express'
 import { errors, success, successWithCursor } from '../utils/response'
 import { ArticleCursorPaginationResult, ArticleNotFoundError, articleService } from '../services/articleService'
+import { AuthenticatedRequest } from '../middlewares/authenticateJWT'
+import { ArticleViewEventType } from '@prisma/client'
 
 /**
  * Cursor 기반 페이지네이션을 사용하여 기사 목록을 가져오는 컨트롤러입니다.
@@ -72,6 +74,45 @@ export const getArticleById = async (req: Request, res: Response) => {
     if (error instanceof ArticleNotFoundError) {
       return errors.notFound(res, 'Article not found')
     }
+    return errors.internal(res)
+  }
+}
+
+/**
+ * 기사 조회 이벤트를 저장하는 컨트롤러입니다.
+ * 사용자가 특정 기사를 조회할 때 발생하는 이벤트를 저장합니다.
+ * @param {AuthenticatedRequest} req - 인증된 사용자 요청 객체.
+ * @param {Response} res - Express 응답 객체.
+ * @example
+ * // 요청 예시
+ * POST /api/articles/view-events
+ * {
+ *  "articleId": 1,
+ *  "eventType": "VIEW"
+ *  }
+ */
+export const storeArticleViewEvent = async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.userId
+  if (!userId) {
+    return errors.unauthorized(res, 'User ID is required')
+  }
+
+  const { articleId, eventType } = req.body
+  if (!articleId || !eventType) {
+    return errors.badRequest(res, 'articleId and eventType are required')
+  }
+
+  if (!Object.values(ArticleViewEventType).includes(eventType)) {
+    return errors.badRequest(res, 'Invalid eventType')
+  }
+
+  try {
+    await articleService.storeArticleViewEvent(userId, articleId, eventType)
+    return success(res, null, {
+      message: 'Article view event stored successfully',
+    })
+  } catch (error) {
+    console.error('Error storing article view event:', error)
     return errors.internal(res)
   }
 }

@@ -42,8 +42,6 @@ describe('ArticleService', () => {
 
     const mockArticle3: ProcessedArticle = {
       id: 3,
-      title: 'Test Article 3',
-      one_line_summary: 'Summary 3',
       full_summary: 'Full summary 3',
       language: 'ko',
       region: null,
@@ -286,6 +284,24 @@ describe('ArticleService', () => {
       }
 
       expect(prismaMock.processedArticle.findUnique).toHaveBeenCalledTimes(testIds.length)
+    })
+  })
+
+  describe('storeArticleViewEvent', () => {
+    it('Successfully stores an article view event', async () => {
+      const userId = 1
+      const articleId = 2
+      const eventType = 'VIEW'
+
+      await articleService.storeArticleViewEvent(userId, articleId, eventType)
+
+      expect(prismaMock.articleViewEvent.create).toHaveBeenCalledWith({
+        data: {
+          user_id: userId,
+          p_article_id: articleId,
+          event_type: eventType,
+        },
+      })
     })
   })
 
