@@ -40,6 +40,7 @@ export const updateNickname = async (req: AuthenticatedRequest, res: Response): 
       message: 'Nickname updated successfully',
     })
   } catch (error) {
+    console.error('Error updating nickname:', error)
     return errors.internal(res)
   }
 }
@@ -82,6 +83,7 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response): Prom
       message: 'User information updated successfully',
     })
   } catch (error) {
+    console.error('Error updating user:', error)
     if (error instanceof UserNotFoundError) {
       return errors.notFound(res, 'User not found')
     }
@@ -133,6 +135,7 @@ export const updateUserSectionPreferences = async (req: AuthenticatedRequest, re
       message: 'User section preferences updated successfully',
     })
   } catch (error) {
+    console.error('Error updating user section preferences:', error)
     return errors.internal(res)
   }
 }
@@ -160,6 +163,7 @@ export const getUserSectionPreferences = async (req: AuthenticatedRequest, res: 
       message: 'User section preferences retrieved successfully',
     })
   } catch (error) {
+    console.error('Error retrieving user section preferences:', error)
     return errors.internal(res)
   }
 }

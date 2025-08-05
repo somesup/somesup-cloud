@@ -8,11 +8,17 @@ jest.mock('../../services/sectionService')
 describe('sectionController', () => {
   let req: any
   let res: any
+  let consoleErrorSpy: jest.SpyInstance
 
   beforeEach(() => {
     jest.clearAllMocks()
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
     req = { query: {}, params: {} }
     res = {}
+  })
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore()
   })
 
   describe('getSections', () => {
@@ -35,6 +41,7 @@ describe('sectionController', () => {
 
       await getSections(req, res)
 
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error fetching sections:', expect.any(SectionNotFoundError))
       expect(errors.notFound).toHaveBeenCalledWith(res, 'Sections not found')
     })
 
@@ -44,6 +51,7 @@ describe('sectionController', () => {
 
       await getSections(req, res)
 
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error fetching sections:', error)
       expect(errors.internal).toHaveBeenCalledWith(res)
     })
   })
@@ -67,6 +75,7 @@ describe('sectionController', () => {
 
       await getSectionById(req, res)
 
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error retrieving section:', expect.any(SectionNotFoundError))
       expect(errors.notFound).toHaveBeenCalledWith(res, 'Section not found')
     })
 
@@ -77,6 +86,7 @@ describe('sectionController', () => {
 
       await getSectionById(req, res)
 
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error retrieving section:', error)
       expect(errors.internal).toHaveBeenCalledWith(res)
     })
   })

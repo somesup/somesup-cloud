@@ -12,6 +12,7 @@ const mockInternalError = errors.internal as jest.Mock
 describe('articleController', () => {
   let req: any
   let res: any
+  let consoleErrorSpy: jest.SpyInstance
 
   beforeEach(() => {
     req = { query: {}, params: {} }
@@ -19,6 +20,11 @@ describe('articleController', () => {
     mockSuccessWithCursor.mockReset()
     mockSuccess.mockReset()
     mockInternalError.mockReset()
+    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore()
   })
 
   describe('getArticles', () => {
@@ -66,6 +72,7 @@ describe('articleController', () => {
       await getArticles(req, res)
 
       expect(articleService.getArticlesByCursor).toHaveBeenCalled()
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error fetching articles:', error)
       expect(mockInternalError).toHaveBeenCalledWith(res)
       expect(mockSuccessWithCursor).not.toHaveBeenCalled()
     })
@@ -103,6 +110,7 @@ describe('articleController', () => {
       await getArticleById(req, res)
 
       expect(mockSuccess).not.toHaveBeenCalled()
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error retrieving article:', expect.any(ArticleNotFoundError))
       expect(errors.notFound).toHaveBeenCalledWith(res, 'Article not found')
     })
 
@@ -110,6 +118,7 @@ describe('articleController', () => {
       req.params.id = '100'
       ;(articleService.getArticleById as jest.Mock).mockRejectedValue(new Error('err'))
       await getArticleById(req, res)
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error retrieving article:', expect.any(Error))
       expect(mockInternalError).toHaveBeenCalledWith(res)
       expect(mockSuccess).not.toHaveBeenCalled()
     })

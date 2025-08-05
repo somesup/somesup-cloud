@@ -68,6 +68,7 @@ export const getArticleById = async (req: Request, res: Response) => {
       message: 'Article retrieved successfully',
     })
   } catch (error) {
+    console.error('Error retrieving article:', error)
     if (error instanceof ArticleNotFoundError) {
       return errors.notFound(res, 'Article not found')
     }

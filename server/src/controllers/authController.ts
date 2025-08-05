@@ -33,6 +33,7 @@ export const requestPhoneAuth = async (req: Request, res: Response) => {
       message: 'Verification code sent successfully',
     })
   } catch (error) {
+    console.error('Error sending verification code:', error)
     return errors.internal(res)
   }
 }
@@ -99,6 +100,7 @@ export const verifyPhoneAuth = async (req: Request, res: Response) => {
       message: 'Phone verification successful',
     })
   } catch (error) {
+    console.error('Error verifying phone code:', error)
     if (error instanceof CodeDoesnotExistError) {
       return errors.notFound(res, 'Verification code does not exist or has expired')
     }
@@ -193,6 +195,7 @@ export const refreshAccessToken = async (req: Request, res: Response) => {
       message: 'Access token refreshed successfully',
     })
   } catch (error) {
+    console.error('Error refreshing access token:', error)
     if (error instanceof RefreshTokenNotFoundError) {
       return errors.unauthorized(res, 'Refresh token not found for the user')
     }
