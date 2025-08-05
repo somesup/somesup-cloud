@@ -9,6 +9,8 @@ jest.mock('../../utils/response')
 jest.mock('../../services/userService')
 jest.mock('../../services/sectionService')
 
+let consoleErrorSpy: jest.SpyInstance
+
 const mockRes = () => {
   const res: Partial<Response> = {
     status: jest.fn().mockReturnThis(),
@@ -16,6 +18,14 @@ const mockRes = () => {
   }
   return res as Response
 }
+
+beforeEach(() => {
+  consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+})
+
+afterEach(() => {
+  consoleErrorSpy.mockRestore()
+})
 
 describe('updateNickname', () => {
   beforeEach(() => {
@@ -103,6 +113,7 @@ describe('updateNickname', () => {
 
     await updateNickname(req, res)
 
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Error updating nickname:', expect.any(Error))
     expect(errors.internal).toHaveBeenCalledWith(res)
   })
 })
@@ -189,6 +200,7 @@ describe('updateUser', () => {
 
     await updateUser(req, res)
 
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Error updating user:', expect.any(Error))
     expect(errors.internal).toHaveBeenCalledWith(res)
   })
 })
@@ -254,6 +266,7 @@ describe('updateUserSectionPreferences', () => {
 
     await updateUserSectionPreferences(req, res)
 
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Error updating user section preferences:', expect.any(Error))
     expect(errors.internal).toHaveBeenCalledWith(res)
   })
 })
@@ -301,6 +314,7 @@ describe('getUserSectionPreferences', () => {
 
     await getUserSectionPreferences(req, res)
 
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Error retrieving user section preferences:', expect.any(Error))
     expect(errors.internal).toHaveBeenCalledWith(res)
   })
 })

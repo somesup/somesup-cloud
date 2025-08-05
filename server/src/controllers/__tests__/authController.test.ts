@@ -13,6 +13,8 @@ jest.mock('../../services/sectionService')
 jest.mock('../../utils/generate')
 jest.mock('../../config/jwt')
 
+let consoleErrorSpy: jest.SpyInstance
+
 const mockReq = (body: any = {}) => ({ body }) as any
 const mockRes = () => {
   const res: any = {}
@@ -24,6 +26,11 @@ const mockRes = () => {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+})
+
+afterEach(() => {
+  consoleErrorSpy.mockRestore()
 })
 
 describe('requestPhoneAuth', () => {
@@ -56,6 +63,7 @@ describe('requestPhoneAuth', () => {
 
     await requestPhoneAuth(req, res)
 
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Error sending verification code:', expect.any(Error))
     expect(errors.internal).toHaveBeenCalledWith(res)
   })
 })
@@ -183,6 +191,7 @@ describe('verifyPhoneAuth', () => {
 
     await verifyPhoneAuth(req, res)
 
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Error verifying phone code:', expect.any(Error))
     expect(errors.internal).toHaveBeenCalledWith(res)
   })
 })
@@ -232,6 +241,7 @@ describe('guestLogin', () => {
 
     await guestLogin(req, res)
 
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Error during guest login:', expect.any(Error))
     expect(errors.internal).toHaveBeenCalledWith(res)
   })
 })
@@ -314,6 +324,10 @@ describe('refreshAccessToken', () => {
 
     await refreshAccessToken(req, res)
 
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'Error refreshing access token:',
+      expect.any(RefreshTokenNotFoundError),
+    )
     expect(errors.unauthorized).toHaveBeenCalledWith(res, 'Refresh token not found for the user')
   })
 
@@ -328,6 +342,7 @@ describe('refreshAccessToken', () => {
 
     await refreshAccessToken(req, res)
 
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Error refreshing access token:', expect.any(Error))
     expect(errors.unauthorized).toHaveBeenCalledWith(res, 'Invalid refresh token')
   })
 })

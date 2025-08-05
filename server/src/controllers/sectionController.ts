@@ -27,6 +27,7 @@ export const getSections = async (req: Request, res: Response): Promise<Response
       message: 'Sections retrieved successfully',
     })
   } catch (error) {
+    console.error('Error fetching sections:', error)
     if (error instanceof SectionNotFoundError) {
       return errors.notFound(res, 'Sections not found')
     }
@@ -59,6 +60,7 @@ export const getSectionById = async (req: Request, res: Response): Promise<Respo
       message: 'Section retrieved successfully',
     })
   } catch (error) {
+    console.error('Error retrieving section:', error)
     if (error instanceof SectionNotFoundError) {
       return errors.notFound(res, 'Section not found')
     }
