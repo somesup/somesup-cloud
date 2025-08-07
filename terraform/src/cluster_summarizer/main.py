@@ -513,9 +513,9 @@ class BigQueryClient:
             processed_id: The ID of the processed article.
             embedding: The embedding vector to upload.
         """
-        if embedding is None:
+        if embedding is None or len(embedding) == 0:
             logging.warning(
-                "Embedding Vecotr is None. Skipping upload to BigQuery.")
+                "Embedding Vector is None. Skipping upload to BigQuery.")
             return
 
         table_id = f"{self._project}.{self._bq_dataset}.{self._bq_table}"

@@ -22,7 +22,7 @@ resource "google_bigquery_table" "p_article_embeddings" {
 resource "google_bigquery_table" "user_p_article_scores" {
   project             = var.project
   dataset_id          = google_bigquery_dataset.recommendation.dataset_id
-  table_id            = "user_p_article_scores"
+  table_id            = "user_embeddings"
   schema              = file("${path.module}/src/schema/user_embeddings.json")
   deletion_protection = false
 
