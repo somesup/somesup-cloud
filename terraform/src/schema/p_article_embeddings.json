@@ -1,0 +1,22 @@
+[
+  {
+    "name": "p_article_id",
+    "type": "INT64",
+    "mode": "REQUIRED"
+  },
+  {
+    "name": "embedding_vector",
+    "type": "FLOAT64",
+    "mode": "REPEATED"
+  },
+  {
+    "name": "created_at",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED"
+  },
+  {
+    "name": "updated_at",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED"
+  }
+]
