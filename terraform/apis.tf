@@ -52,3 +52,8 @@ resource "google_project_service" "resource_manager" {
   project = var.project
   service = "cloudresourcemanager.googleapis.com"
 }
+
+resource "google_project_service" "bigquery" {
+  project = var.project
+  service = "bigquery.googleapis.com"
+}

@@ -16,11 +16,15 @@ module "cluster_summarizer" {
     INSTANCE_CONNECTION_NAME  = google_sql_database_instance.mysql.connection_name
     MYSQL_SUMMARIZER_USERNAME = data.google_secret_manager_secret_version.mysql_summarizer_username.secret_data
     MYSQL_SUMMARIZER_PASSWORD = data.google_secret_manager_secret_version.mysql_summarizer_password.secret_data
+    BQ_EMBEDDING_DATASET      = google_bigquery_dataset.recommendation.dataset_id
+    BQ_EMBEDDING_TABLE        = google_bigquery_table.p_article_embeddings.table_id
   }
   roles = [
     "roles/cloudsql.client",
     "roles/cloudsql.instanceUser",
     "roles/aiplatform.user",
     "roles/aiplatform.endpointUser",
+    "roles/bigquery.dataEditor",
+    "roles/bigquery.jobUser",
   ]
 }

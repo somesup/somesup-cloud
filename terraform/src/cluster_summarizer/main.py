@@ -1,5 +1,6 @@
 import contextlib
 import dataclasses
+import datetime
 import io
 import logging
 import os
@@ -10,8 +11,10 @@ import functions_framework
 import google.cloud.logging
 import google.cloud.sql.connector
 import google.genai
+import google.genai.types
 import pymysql
 import pymysql.cursors
+from google.cloud import bigquery
 from PIL import Image
 
 # Configure logging to Google Cloud Logging
@@ -29,6 +32,8 @@ class Config:
     MYSQL_USERNAME = os.getenv('MYSQL_SUMMARIZER_USERNAME', '')
     MYSQL_PASSWORD = os.getenv('MYSQL_SUMMARIZER_PASSWORD', '')
     MYSQL_DATABASE = 'somesup'
+    BQ_EMBEDDING_DATASET = os.getenv("BQ_EMBEDDING_DATASET", "")
+    BQ_EMBEDDING_TABLE = os.getenv("BQ_EMBEDDING_TABLE", "")
 
     @classmethod
     def validate(cls) -> None:
@@ -38,6 +43,8 @@ class Config:
             (cls.INSTANCE_CONNECTION_NAME, "INSTANCE_CONNECTION_NAME"),
             (cls.MYSQL_USERNAME, "MYSQL_USERNAME"),
             (cls.MYSQL_PASSWORD, "MYSQL_PASSWORD"),
+            (cls.BQ_EMBEDDING_DATASET, "BQ_EMBEDDING_DATASET"),
+            (cls.BQ_EMBEDDING_TABLE, "BQ_EMBEDDING_TABLE"),
         ]
 
         for value, name in required_configs:
@@ -466,6 +473,75 @@ class VertexAiClient:
             logger.error("Error generating AI summary: %s", e)
             raise
 
+    def get_embeddings(
+        self,
+        titles: str,
+        contents: str,
+    ) -> list[google.genai.types.ContentEmbedding] | None:
+        result = self._client.models.embed_content(
+            contents=f"{titles}\n\n{contents}",
+            model="text-embedding-004",
+            config=google.genai.types.EmbedContentConfig(
+                output_dimensionality=768),
+        )
+
+        return result.embeddings
+
+
+class BigQueryClient:
+
+    def __init__(
+        self,
+        project: str,
+        bq_dataset: str,
+        bq_table: str,
+    ):
+        self._project = project
+        self._bq_dataset = bq_dataset
+        self._bq_table = bq_table
+
+        self._bq_client = bigquery.Client(project=self._project)
+
+    def upload_embedding_to_bq(
+        self,
+        processed_id: int,
+        embedding: list[google.genai.types.ContentEmbedding] | None,
+    ) -> None:
+        """Upload the embedding vector to BigQuery.
+
+        Args:
+            processed_id: The ID of the processed article.
+            embedding: The embedding vector to upload.
+        """
+        if embedding is None:
+            logging.warning(
+                "Embedding Vecotr is None. Skipping upload to BigQuery.")
+            return
+
+        table_id = f"{self._project}.{self._bq_dataset}.{self._bq_table}"
+        now = datetime.datetime.now(tz=datetime.timezone.utc)
+
+        rows_to_insert = [{
+            "p_article_id": processed_id,
+            "embedding_vector": embedding[0].values,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }]
+
+        errors = self._bq_client.insert_rows_json(
+            table_id,
+            rows_to_insert,
+        )
+
+        if errors:
+            logger.error("Error inserting embeddings into BigQuery: %s",
+                         errors)
+            raise RuntimeError(f"BigQuery insert errors: {errors}")
+        else:
+            logger.info(
+                "Inserted embedding vector for processed article id %d into BigQuery",
+                processed_id)
+
 
 class ArticleSummarizer:
     """Main service class that orchestrates the article summarization process."""
@@ -485,7 +561,14 @@ class ArticleSummarizer:
 
         self._image_client = ImageClient()
 
-    def process_articles(self, article_ids: list[int]) -> tuple[str, int]:
+        self._bq_client = BigQueryClient(
+            project=config.PROJECT_ID,
+            bq_dataset=config.BQ_EMBEDDING_DATASET,
+            bq_table=config.BQ_EMBEDDING_TABLE,
+        )
+
+    def process_articles(
+            self, article_ids: list[int]) -> tuple[ProcessedArticle, int]:
         """Process articles by generating summaries and saving to database."""
         if not article_ids:
             raise ValueError("Article IDs cannot be empty")
@@ -522,9 +605,18 @@ class ArticleSummarizer:
         processed_id = self.db_client.save_processed_article_with_references(
             processed_article, articles)
 
-        logger.info("Successfully processed articles into processed_id: %d",
-                    processed_id)
-        return processed_article.title, processed_id
+        # Generate and upload embeddings to BigQuery
+        embeddings = self.ai_client.get_embeddings(
+            processed_article.title,
+            processed_article.full_summary,
+        )
+
+        self._bq_client.upload_embedding_to_bq(
+            processed_id,
+            embeddings,
+        )
+
+        return processed_article, processed_id
 
 
 @functions_framework.http
@@ -551,13 +643,10 @@ def main(request):
 
         # Process articles
         summarizer = ArticleSummarizer(Config())
-        title, processed_id = summarizer.process_articles(article_ids)
+        processed_article, processed_id = summarizer.process_articles(
+            article_ids)
 
-        response_message = 'Processed article "%s" saved successfully with ID %d' % (
-            title, processed_id)
-        logger.info(response_message)
-
-        return response_message, 200
+        return f'Processed Article Successfully with title: {processed_article.title}, ID: {processed_id}', 200
     except Exception as e:
         logger.error("Unexpected error: %s", e)
         return f"Internal server error: {e}", 500
