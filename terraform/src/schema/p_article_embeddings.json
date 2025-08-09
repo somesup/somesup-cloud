@@ -5,6 +5,11 @@
     "mode": "REQUIRED"
   },
   {
+    "name": "section_id",
+    "type": "INT64",
+    "mode": "REQUIRED"
+  },
+  {
     "name": "embedding_vector",
     "type": "FLOAT64",
     "mode": "REPEATED"
