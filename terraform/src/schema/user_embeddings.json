@@ -12,11 +12,13 @@
   {
     "name": "created_at",
     "type": "TIMESTAMP",
-    "mode": "REQUIRED"
+    "mode": "REQUIRED",
+    "defaultValueExpression": "CURRENT_TIMESTAMP()"
   },
   {
     "name": "updated_at",
     "type": "TIMESTAMP",
-    "mode": "REQUIRED"
+    "mode": "REQUIRED",
+    "defaultValueExpression": "CURRENT_TIMESTAMP()"
   }
 ]
