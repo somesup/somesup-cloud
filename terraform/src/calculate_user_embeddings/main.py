@@ -1,9 +1,10 @@
 import collections
 import contextlib
 import datetime
+import json
 import logging
 import os
-from typing import Dict, Iterator, List, Optional
+from typing import Dict, Iterator, List, Optional, Sequence, Tuple, TypeVar
 
 import functions_framework
 import google.cloud.logging
@@ -18,14 +19,36 @@ logging_client = google.cloud.logging.Client()
 logging_client.setup_logging()
 logger = logging.getLogger(__name__)
 
+T = TypeVar("T")
+
+
+def chunked(seq: Sequence[T], n: int) -> List[List[T]]:
+    """Split a sequence into chunks of size n.
+
+    Args:
+        seq: Input sequence of any type.
+        n: Chunk size (>0).
+
+    Returns:
+        List of chunks, preserving the element type.
+
+    Raises:
+        ValueError: If n <= 0.
+    """
+    if n <= 0:
+        raise ValueError("Chunk size n must be > 0")
+    return [list(seq[i:i + n]) for i in range(0, len(seq), n)]
+
 
 class Config:
+    """Configuration loaded from environment variables."""
+
     PROJECT_ID = os.getenv("PROJECT_ID", "")
 
-    INSTANCE_CONNECTION_NAME = os.getenv("INSTANCE_CONNECTION_NAME", '')
-    MYSQL_USERNAME = os.getenv('MYSQL_USERNAME', '')
-    MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD', '')
-    MYSQL_DATABASE = 'somesup'
+    INSTANCE_CONNECTION_NAME = os.getenv("INSTANCE_CONNECTION_NAME", "")
+    MYSQL_USERNAME = os.getenv("MYSQL_USERNAME", "")
+    MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD", "")
+    MYSQL_DATABASE = "somesup"
 
     RECOMMENDATION_DATASET = os.getenv("RECOMMENDATION_DATASET", "")
     P_ARTICLE_EMBEDDING_TABLE = os.getenv("P_ARTICLE_EMBEDDING_TABLE", "")
@@ -36,17 +59,30 @@ class Config:
     SCRAP_WEIGHT = 5
     DETAIL_VIEW_WEIGHT = 2
 
+    # Post-processing
+    ENABLE_L2_NORMALIZE = True
+
+    # Performance tuning
+    SECTION_MEAN_SAMPLE_SIZE = int(os.getenv("SECTION_MEAN_SAMPLE_SIZE",
+                                             "50"))  # per section
+    BATCH_SIZE_BQ_UPSERT = int(os.getenv("BATCH_SIZE_BQ_UPSERT",
+                                         "500"))  # rows per MERGE
+
     @classmethod
     def validate(cls) -> None:
-        """Validates the configuration by checking required environment variables."""
+        """Validate required configuration values.
+
+        Raises:
+            ValueError: If any required configuration is missing.
+        """
         if not cls.PROJECT_ID:
             raise ValueError("PROJECT_ID is not set.")
         if not cls.INSTANCE_CONNECTION_NAME:
             raise ValueError("INSTANCE_CONNECTION_NAME is not set.")
         if not cls.MYSQL_USERNAME:
-            raise ValueError("MYSQL_FETCHER_USERNAME is not set.")
+            raise ValueError("MYSQL_USERNAME is not set.")
         if not cls.MYSQL_PASSWORD:
-            raise ValueError("MYSQL_FETCHER_PASSWORD is not set.")
+            raise ValueError("MYSQL_PASSWORD is not set.")
         if not cls.RECOMMENDATION_DATASET:
             raise ValueError("RECOMMENDATION_DATASET is not set.")
         if not cls.P_ARTICLE_EMBEDDING_TABLE:
@@ -56,7 +92,7 @@ class Config:
 
 
 class DatabaseClient:
-    """Client for managing database operations with Google Cloud SQL."""
+    """Client for managing MySQL (Cloud SQL) operations."""
 
     def __init__(
         self,
@@ -65,28 +101,23 @@ class DatabaseClient:
         password: str,
         database: str,
     ) -> None:
-        """Initializes the DatabaseClient with connection parameters."""
+        """Initialize the DatabaseClient.
+
+        Args:
+            instance_name: Cloud SQL instance connection name.
+            username: MySQL username.
+            password: MySQL password.
+            database: Database name.
+        """
         self._instance_name = instance_name
         self._username = username
         self._password = password
         self._database = database
-
         self._connector = google.cloud.sql.connector.Connector()
 
     @contextlib.contextmanager
     def get_connection(self) -> Iterator[pymysql.connections.Connection]:
-        """Context manager for database connections.
-        
-        Provides a secure way to manage database connections with automatic
-        cleanup. The connection is automatically closed when exiting the
-        context, even if an exception occurs.
-        
-        Yields:
-            pymysql.connections.Connection: Active database connection.
-            
-        Raises:
-            Exception: Re-raises any database connection errors after logging.
-        """
+        """Context manager that yields a MySQL connection and closes it after use."""
         connection = None
         try:
             connection = self._connector.connect(
@@ -97,26 +128,34 @@ class DatabaseClient:
                 db=self._database,
             )
             yield connection
-        except Exception as e:
-            raise e
         finally:
             if connection:
                 connection.close()
 
+    def get_all_user_ids(self) -> List[int]:
+        """Fetch all user IDs.
+
+        Returns:
+            List of user IDs (ints).
+        """
+        query = "SELECT id FROM user"
+        with self.get_connection() as conn:
+            with conn.cursor(pymysql.cursors.DictCursor) as cursor:
+                cursor.execute(query)
+                rows = cursor.fetchall()
+        return [int(row["id"]) for row in rows]
+
     def get_recent_likes_by_user(
         self,
         start_date: Optional[datetime.date] = None,
-    ) -> dict[str, list[int]]:
-        """Fetches recent likes by users from the database.
-
-        This method retrieves likes made by users since a specified start date.
-        If no start date is provided, it defaults to 30 days ago.
+    ) -> dict[int, list[int]]:
+        """Fetch likes by user since start_date.
 
         Args:
-            start_date: The date from which to start fetching likes. (defaults to 30 days ago)
+            start_date: Start date (defaults to 30 days ago).
 
         Returns:
-            A dictionary mapping user IDs to lists of article IDs they have liked.
+            Mapping user_id -> list of liked article_ids.
         """
         if start_date is None:
             start_date = datetime.date.today() - datetime.timedelta(days=30)
@@ -127,32 +166,27 @@ class DatabaseClient:
         WHERE liked_at >= %s
         """
 
-        user_likes = collections.defaultdict(list[int])
-
+        user_likes: dict[int, list[int]] = collections.defaultdict(list)
         with self.get_connection() as conn:
             with conn.cursor(pymysql.cursors.DictCursor) as cursor:
                 cursor.execute(query, (start_date, ))
                 rows = cursor.fetchall()
 
         for row in rows:
-            user_likes[row["user_id"]].append(row["p_article_id"])
-
+            user_likes[int(row["user_id"])].append(int(row["p_article_id"]))
         return user_likes
 
     def get_recent_scraps_by_user(
         self,
         start_date: Optional[datetime.date] = None,
-    ) -> dict[str, list[int]]:
-        """Fetches recent scraps by users from the database.
-
-        This method retrieves scraps made by users since a specified start date.
-        If no start date is provided, it defaults to 30 days ago.
+    ) -> dict[int, list[int]]:
+        """Fetch scraps by user since start_date.
 
         Args:
-            start_date: The date from which to start fetching scraps. (defaults to 30 days ago)
+            start_date: Start date (defaults to 30 days ago).
 
         Returns:
-            A dictionary mapping user IDs to lists of article IDs they have scraped.
+            Mapping user_id -> list of scrapped article_ids.
         """
         if start_date is None:
             start_date = datetime.date.today() - datetime.timedelta(days=30)
@@ -163,32 +197,27 @@ class DatabaseClient:
         WHERE scrapped_at >= %s
         """
 
-        user_scraps = collections.defaultdict(list[int])
-
+        user_scraps: dict[int, list[int]] = collections.defaultdict(list)
         with self.get_connection() as conn:
             with conn.cursor(pymysql.cursors.DictCursor) as cursor:
                 cursor.execute(query, (start_date, ))
                 rows = cursor.fetchall()
 
         for row in rows:
-            user_scraps[row["user_id"]].append(row["p_article_id"])
-
+            user_scraps[int(row["user_id"])].append(int(row["p_article_id"]))
         return user_scraps
 
     def get_recent_detail_view_by_user(
         self,
         start_date: Optional[datetime.date] = None,
-    ) -> dict[str, list[int]]:
-        """Fetches recent detail views by users from the database.
-
-        This method retrieves detail views made by users since a specified start date.
-        If no start date is provided, it defaults to 30 days ago.
+    ) -> dict[int, list[int]]:
+        """Fetch detail views by user since start_date.
 
         Args:
-            start_date: The date from which to start fetching detail views. (defaults to 30 days ago)
+            start_date: Start date (defaults to 30 days ago).
 
         Returns:
-            A dictionary mapping user IDs to lists of article IDs they have viewed.
+            Mapping user_id -> list of viewed article_ids.
         """
         if start_date is None:
             start_date = datetime.date.today() - datetime.timedelta(days=30)
@@ -199,92 +228,115 @@ class DatabaseClient:
         WHERE event_at >= %s AND event_type = 'DETAIL_VIEW'
         """
 
-        user_detail_views = collections.defaultdict(list[int])
-
+        user_detail_views: dict[int, list[int]] = collections.defaultdict(list)
         with self.get_connection() as conn:
             with conn.cursor(pymysql.cursors.DictCursor) as cursor:
                 cursor.execute(query, (start_date, ))
                 rows = cursor.fetchall()
 
         for row in rows:
-            user_detail_views[row["user_id"]].append(row["p_article_id"])
-
+            user_detail_views[int(row["user_id"])].append(
+                int(row["p_article_id"]))
         return user_detail_views
 
     def get_user_section_preferences_batch(
-        self,
-        user_ids: list[str],
-    ) -> dict[str, dict[int, int]]:
-        """Fetches section preferences for multiple users in a single query.
+            self, user_ids: list[int]) -> dict[int, dict[int, float]]:
+        """Fetch section preferences for a list of users.
 
         Args:
-            user_ids: List of user IDs to fetch preferences for.
+            user_ids: List of user IDs.
 
         Returns:
-            A dictionary mapping user IDs to their section preferences.
+            Mapping user_id -> {section_id: preference}.
         """
         if not user_ids:
             return {}
 
-        # Create placeholders for the IN clause
-        placeholders = ','.join(['%s'] * len(user_ids))
+        placeholders = ",".join(["%s"] * len(user_ids))
         query = f"""
         SELECT user_id, section_id, preference
         FROM user_article_section_preference
         WHERE user_id IN ({placeholders})
         """
 
-        user_section_preferences = collections.defaultdict(dict)
-
+        user_section_preferences: dict[int, dict[
+            int, float]] = collections.defaultdict(dict)
         with self.get_connection() as conn:
             with conn.cursor(pymysql.cursors.DictCursor) as cursor:
                 cursor.execute(query, user_ids)
                 rows = cursor.fetchall()
 
         for row in rows:
-            user_id = row["user_id"]
-            section_id = row["section_id"]
-            preference_score = row["preference"]
-            user_section_preferences[user_id][section_id] = preference_score
-
+            uid = int(row["user_id"])
+            sid = int(row["section_id"])
+            pref = float(row["preference"])
+            user_section_preferences[uid][sid] = pref
         return user_section_preferences
 
-    def get_article_sections_batch(
-        self,
-        article_ids: list[int],
-    ) -> dict[int, int]:
-        """Fetches section information for multiple articles in a single query.
+    def get_article_sections_batch(self,
+                                   article_ids: list[int]) -> dict[int, int]:
+        """Fetch section_id for each article in a single IN-clause query.
 
         Args:
-            article_ids: List of article IDs to fetch sections for.
+            article_ids: List of article IDs.
 
         Returns:
-            A dictionary mapping article IDs to their section IDs.
+            Mapping article_id -> section_id.
         """
         if not article_ids:
             return {}
 
-        placeholders = ','.join(['%s'] * len(article_ids))
+        placeholders = ",".join(["%s"] * len(article_ids))
         query = f"""
         SELECT id, section_id
         FROM processed_article
         WHERE id IN ({placeholders})
         """
 
-        article_sections = {}
-
+        article_sections: dict[int, int] = {}
         with self.get_connection() as conn:
             with conn.cursor(pymysql.cursors.DictCursor) as cursor:
                 cursor.execute(query, article_ids)
                 rows = cursor.fetchall()
-
-        for row in rows:
-            article_sections[row["id"]] = row["section_id"]
-
+                for row in rows:
+                    article_sections[int(row["id"])] = int(row["section_id"])
         return article_sections
+
+    def get_section_sample_articles(
+            self, limit_per_section: int) -> dict[int, list[int]]:
+        """Fetch a small sample of article IDs per section.
+
+        This is used to approximate section mean embeddings without scanning all articles.
+
+        Args:
+            limit_per_section: Number of articles to sample per section.
+
+        Returns:
+            Mapping section_id -> list of sampled article_ids.
+        """
+        query = f"""
+        SELECT section_id, id
+        FROM (
+            SELECT
+              section_id,
+              id,
+              ROW_NUMBER() OVER (PARTITION BY section_id ORDER BY id DESC) AS rn
+            FROM processed_article
+        ) t
+        WHERE rn <= %s
+        """
+        by_section: dict[int, list[int]] = collections.defaultdict(list)
+        with self.get_connection() as conn:
+            with conn.cursor(pymysql.cursors.DictCursor) as cursor:
+                cursor.execute(query, (limit_per_section, ))
+                rows = cursor.fetchall()
+        for row in rows:
+            by_section[int(row["section_id"])].append(int(row["id"]))
+        return by_section
 
 
 class BigQueryClient:
+    """Client for managing BigQuery operations."""
 
     def __init__(
         self,
@@ -293,180 +345,212 @@ class BigQueryClient:
         p_article_embedding_table: str,
         user_embedding_table: str,
     ):
-        self._project = project
+        """Initialize BigQuery client.
 
+        Args:
+            project: GCP Project ID.
+            recommendation_dataset: Dataset name.
+            p_article_embedding_table: Table name for article embeddings.
+            user_embedding_table: Table name for user embeddings.
+        """
+        self._project = project
         self._recommendation_dataset = recommendation_dataset
         self._p_article_embedding_table = p_article_embedding_table
         self._user_embedding_table = user_embedding_table
-
         self._bq_client = bigquery.Client(project=self._project)
 
     def get_p_article_embeddings_batch(
-        self,
-        article_ids: list[int],
-    ) -> dict[int, list[float]]:
-        """Fetches embeddings for multiple P articles in a single query.
+            self, article_ids: list[int]) -> dict[int, list[float]]:
+        """Fetch embeddings for given article IDs.
 
         Args:
-            article_ids: List of article IDs to fetch embeddings for.
+            article_ids: List of article IDs.
 
         Returns:
-            A dictionary mapping article IDs to their embedding vectors.
+            Mapping article_id -> embedding vector (list of floats).
         """
         if not article_ids:
             return {}
-
-        # Convert list to string for BigQuery array parameter
-        article_ids_str = [str(id) for id in article_ids]
 
         query = f"""
         SELECT p_article_id, embedding_vector
         FROM `{self._project}.{self._recommendation_dataset}.{self._p_article_embedding_table}`
         WHERE p_article_id IN UNNEST(@article_ids)
         """
-
         job_config = bigquery.QueryJobConfig(query_parameters=[
             bigquery.ArrayQueryParameter("article_ids", "INT64", article_ids)
         ])
+        results = self._bq_client.query(query, job_config=job_config).result()
 
-        query_job = self._bq_client.query(query, job_config=job_config)
-        results = query_job.result()
-
-        embeddings = {}
+        embeddings: dict[int, list[float]] = {}
         for row in results:
             if row.embedding_vector:
-                embeddings[row.p_article_id] = row.embedding_vector
-
+                embeddings[int(row.p_article_id)] = list(row.embedding_vector)
         return embeddings
 
-    def upsert_user_embeddings_batch(
-        self,
-        user_embeddings: dict[str, list[float]],
-    ) -> None:
-        """Inserts or updates multiple user embeddings in BigQuery using individual queries.
+    def upsert_user_embeddings_bulk(
+            self, rows: List[Tuple[int, List[float]]]) -> None:
+        """Bulk upsert user embeddings with a single MERGE using inline arrays.
 
         Args:
-            user_embeddings: Dictionary mapping user IDs to their embedding vectors.
+            rows: List of tuples (user_id, embedding_vector).
+        """
+        if not rows:
+            return
+
+        user_ids = [r[0] for r in rows]
+        embedding_jsons = [json.dumps(r[1]) for r in rows]
+
+        query = f"""
+        MERGE `{self._project}.{self._recommendation_dataset}.{self._user_embedding_table}` T
+        USING (
+          SELECT
+            user_id,
+            (SELECT ARRAY(
+              SELECT CAST(x AS FLOAT64)
+              FROM UNNEST(JSON_EXTRACT_ARRAY(embedding_json)) AS s
+              CROSS JOIN UNNEST([CAST(s AS STRING)]) AS x
+            )) AS embedding_vector
+          FROM UNNEST(@user_ids) AS user_id
+          WITH OFFSET o
+          JOIN UNNEST(@embedding_jsons) AS embedding_json WITH OFFSET o2
+          ON o = o2
+        ) S
+        ON T.user_id = S.user_id
+        WHEN MATCHED THEN
+          UPDATE SET embedding_vector = S.embedding_vector, updated_at = CURRENT_TIMESTAMP()
+        WHEN NOT MATCHED THEN
+          INSERT (user_id, embedding_vector) VALUES (S.user_id, S.embedding_vector)
+        """
+
+        job_config = bigquery.QueryJobConfig(query_parameters=[
+            bigquery.ArrayQueryParameter("user_ids", "INT64", user_ids),
+            bigquery.ArrayQueryParameter("embedding_jsons", "STRING",
+                                         embedding_jsons),
+        ])
+        self._bq_client.query(query, job_config=job_config).result()
+
+    def upsert_user_embeddings_batch(
+            self, user_embeddings: Dict[int, List[float]]) -> None:
+        """Upsert user embeddings in batches to reduce query count.
+
+        Args:
+            user_embeddings: Mapping user_id -> embedding vector.
         """
         if not user_embeddings:
             return
-
-        successful_updates = 0
-
-        for user_id, embedding_vector in user_embeddings.items():
-            try:
-                merge_sql = f"""
-                MERGE `{self._project}.{self._recommendation_dataset}.{self._user_embedding_table}` T
-                USING (SELECT @user_id as user_id, @embedding_vector as embedding_vector) S
-                ON T.user_id = S.user_id
-                WHEN MATCHED THEN
-                    UPDATE SET
-                        embedding_vector = S.embedding_vector,
-                        updated_at = CURRENT_TIMESTAMP()
-                WHEN NOT MATCHED THEN
-                    INSERT (user_id, embedding_vector)
-                    VALUES (S.user_id, S.embedding_vector)
-                """
-
-                job_config = bigquery.QueryJobConfig(query_parameters=[
-                    bigquery.ScalarQueryParameter("user_id", "INT64",
-                                                  int(user_id)),
-                    bigquery.ArrayQueryParameter("embedding_vector", "FLOAT64",
-                                                 embedding_vector)
-                ])
-
-                job = self._bq_client.query(merge_sql, job_config=job_config)
-                job.result()
-                successful_updates += 1
-
-            except Exception as e:
-                logger.warning(
-                    f"Failed to upsert embedding for user {user_id}: {e}")
-                continue
-
-        logger.info(
-            "Successfully upserted %d out of %d user embeddings to BigQuery",
-            successful_updates,
-            len(user_embeddings),
-        )
+        items: List[Tuple[int, List[float]]] = list(user_embeddings.items())
+        for batch in chunked(items, Config.BATCH_SIZE_BQ_UPSERT):
+            self.upsert_user_embeddings_bulk(batch)
 
 
 class UserEmbeddingGenerator:
-    """Generates user embeddings based on their interactions with articles."""
+    """Generate user embeddings using interactions and section preferences."""
 
     def __init__(self, db_client: DatabaseClient, bq_client: BigQueryClient):
+        """Initialize the generator with DB and BQ clients."""
         self.db_client = db_client
         self.bq_client = bq_client
 
-    def generate_user_embeddings(
-        self,
-        start_date: Optional[datetime.date] = None,
-    ) -> dict[str, list[float]]:
-        """Generates embeddings for all users based on their recent interactions.
-        
-        Args:
-            start_date: The date from which to consider interactions (defaults to 30 days ago)
-            
-        Returns:
-            Dictionary mapping user IDs to their computed embedding vectors.
-        """
-        logger.info("Starting user embedding generation...")
+    def generate_all_user_embeddings(
+            self,
+            start_date: Optional[datetime.date] = None
+    ) -> Dict[int, List[float]]:
+        """Generate embeddings for all users.
 
-        # Step 1: Get all user interactions
-        logger.info("Fetching user interactions...")
+        Strategy:
+        - Users with interactions: weighted average of interacted article embeddings
+          using action weights multiplied by user's section preference.
+        - Users without interactions: section-preference-weighted average of section mean embeddings.
+          Section means are approximated via small samples per section.
+
+        Args:
+            start_date: Interactions since this date (default: 30 days ago).
+
+        Returns:
+            Mapping user_id -> embedding vector.
+        """
+        logger.info("Starting all-user embedding generation...")
+
+        # Step 0: Users
+        all_user_ids = self.db_client.get_all_user_ids()
+        logger.info("Total users: %d", len(all_user_ids))
+
+        # Step 1: Interactions
         likes = self.db_client.get_recent_likes_by_user(start_date)
         scraps = self.db_client.get_recent_scraps_by_user(start_date)
         detail_views = self.db_client.get_recent_detail_view_by_user(
             start_date)
 
-        # Get all unique users and articles
-        all_users = set(likes.keys()) | set(scraps.keys()) | set(
+        interacted_user_ids = set(likes.keys()) | set(scraps.keys()) | set(
             detail_views.keys())
-        all_articles = set()
-        for user_articles in likes.values():
-            all_articles.update(user_articles)
-        for user_articles in scraps.values():
-            all_articles.update(user_articles)
-        for user_articles in detail_views.values():
-            all_articles.update(user_articles)
+        logger.info("Users with interactions: %d", len(interacted_user_ids))
 
-        all_articles = list(all_articles)
-        all_users = list(all_users)
+        # Collect interacted article IDs
+        interacted_article_ids: set[int] = set()
+        for lst in likes.values():
+            interacted_article_ids.update(lst)
+        for lst in scraps.values():
+            interacted_article_ids.update(lst)
+        for lst in detail_views.values():
+            interacted_article_ids.update(lst)
+        interacted_article_ids_list = list(interacted_article_ids)
 
-        logger.info(
-            f"Found {len(all_users)} users and {len(all_articles)} unique articles"
-        )
+        # Step 2: Fetch article embeddings and sections for interacted articles only
+        article_embeddings_interacted = self.bq_client.get_p_article_embeddings_batch(
+            interacted_article_ids_list)
+        article_sections_interacted = self.db_client.get_article_sections_batch(
+            interacted_article_ids_list)
 
-        # Step 2: Batch fetch article embeddings and sections
-        logger.info("Fetching article embeddings and sections...")
-        article_embeddings = self.bq_client.get_p_article_embeddings_batch(
-            all_articles)
-        article_sections = self.db_client.get_article_sections_batch(
-            all_articles)
-
-        # Step 3: Batch fetch user section preferences
-        logger.info("Fetching user section preferences...")
+        # Step 3: Fetch user section preferences for all users
         user_section_preferences = self.db_client.get_user_section_preferences_batch(
-            all_users)
+            all_user_ids)
 
-        # Step 4: Generate user embeddings
-        logger.info("Computing user embeddings...")
-        user_embeddings = {}
-
-        for user_id in all_users:
-            user_embedding = self._compute_user_embedding(
+        # Step 4: Interaction-based embeddings
+        user_embeddings: Dict[int, List[float]] = {}
+        for user_id in interacted_user_ids:
+            emb = self._compute_user_embedding(
                 likes.get(user_id, []),
                 scraps.get(user_id, []),
                 detail_views.get(user_id, []),
-                article_embeddings,
-                article_sections,
+                article_embeddings_interacted,
+                article_sections_interacted,
                 user_section_preferences.get(user_id, {}),
             )
+            if emb is not None:
+                user_embeddings[user_id] = self._postprocess(emb)
 
-            if user_embedding is not None:
-                user_embeddings[user_id] = user_embedding
+        # Step 5: Section means via sampled articles (avoid full table scan)
+        section_sample_articles = self.db_client.get_section_sample_articles(
+            Config.SECTION_MEAN_SAMPLE_SIZE)
+        sample_article_ids: List[int] = [
+            aid for lst in section_sample_articles.values() for aid in lst
+        ]
+        sample_embeddings = self.bq_client.get_p_article_embeddings_batch(
+            sample_article_ids)
 
-        logger.info(f"Generated embeddings for {len(user_embeddings)} users")
+        section_means = self._calculate_section_means_sampled(
+            section_sample_articles, sample_embeddings)
+
+        # Fallback global mean (from samples as well)
+        global_mean_embedding: Optional[List[float]] = (self._mean_embedding(
+            list(sample_embeddings.values())) if sample_embeddings else None)
+
+        # Step 6: Cold-start users using section preferences
+        for user_id in all_user_ids:
+            if user_id in user_embeddings:
+                continue
+            prefs = user_section_preferences.get(user_id, {})
+            cold_emb = self._section_preference_embedding(prefs, section_means)
+            if cold_emb is None and global_mean_embedding is not None:
+                cold_emb = list(global_mean_embedding)
+            if cold_emb is not None:
+                user_embeddings[user_id] = self._postprocess(cold_emb)
+
+        logger.info(
+            "Generated embeddings for %d users (including cold-start).",
+            len(user_embeddings),
+        )
         return user_embeddings
 
     def _compute_user_embedding(
@@ -476,89 +560,168 @@ class UserEmbeddingGenerator:
         viewed_articles: List[int],
         article_embeddings: Dict[int, List[float]],
         article_sections: Dict[int, int],
-        user_section_preferences: dict[int, int],
+        user_section_preferences: Dict[int, float],
     ) -> Optional[List[float]]:
-        """Computes a user's embedding based on their interactions.
-        
+        """Compute interaction-based user embedding using weighted average.
+
         Args:
-            user_id: The user ID
-            liked_articles: List of article IDs the user liked
-            scraped_articles: List of article IDs the user scraped
-            viewed_articles: List of article IDs the user viewed in detail
-            article_embeddings: Mapping of article IDs to their embeddings
-            article_sections: Mapping of article IDs to their section IDs
-            user_section_preferences: User's section preference scores
-            
+            liked_articles: Article IDs liked by the user.
+            scraped_articles: Article IDs scrapped by the user.
+            viewed_articles: Article IDs viewed in detail by the user.
+            article_embeddings: Mapping article_id -> embedding vector.
+            article_sections: Mapping article_id -> section_id.
+            user_section_preferences: Mapping section_id -> preference weight.
+
         Returns:
-            The computed user embedding vector, or None if no valid articles found.
+            User embedding vector or None if no valid interactions.
         """
         weighted_embeddings = []
         total_weight = 0.0
 
-        # Process each interaction type
-        interactions = [(liked_articles, Config.LIKE_WEIGHT),
-                        (scraped_articles, Config.SCRAP_WEIGHT),
-                        (viewed_articles, Config.DETAIL_VIEW_WEIGHT)]
+        interactions = [
+            (liked_articles, Config.LIKE_WEIGHT),
+            (scraped_articles, Config.SCRAP_WEIGHT),
+            (viewed_articles, Config.DETAIL_VIEW_WEIGHT),
+        ]
 
         for articles, base_weight in interactions:
             for article_id in articles:
-                # Skip if we don't have embedding for this article
-                if article_id not in article_embeddings:
+                emb = article_embeddings.get(article_id)
+                if emb is None:
                     continue
-
-                embedding = article_embeddings[article_id]
                 section_id = article_sections.get(article_id)
-
-                # Calculate final weight (base weight * section preference)
-                section_preference = 1  # Default preference
-                if section_id and section_id in user_section_preferences:
-                    section_preference = user_section_preferences[section_id]
-
-                final_weight = base_weight * section_preference
-
-                # Add weighted embedding
-                weighted_embedding = np.array(embedding) * final_weight
-                weighted_embeddings.append(weighted_embedding)
+                section_pref = 1.0
+                if section_id is not None and section_id in user_section_preferences:
+                    section_pref = float(user_section_preferences[section_id])
+                final_weight = float(base_weight) * section_pref
+                weighted_embeddings.append(np.array(emb) * final_weight)
                 total_weight += final_weight
 
         if not weighted_embeddings or total_weight == 0:
             return None
 
-        # Compute weighted average
         user_embedding = np.sum(weighted_embeddings, axis=0) / total_weight
         return user_embedding.tolist()
+
+    def _section_preference_embedding(
+            self, user_section_preferences: Dict[int, float],
+            section_means: Dict[int, List[float]]) -> Optional[List[float]]:
+        """Compute section-preference weighted embedding for cold-start users.
+
+        Args:
+            user_section_preferences: Mapping section_id -> preference weight.
+            section_means: Mapping section_id -> section mean embedding.
+
+        Returns:
+            User embedding vector or None if no valid sections.
+        """
+        weighted = []
+        total_w = 0.0
+        for sid, w in user_section_preferences.items():
+            emb = section_means.get(int(sid))
+            if emb is None:
+                continue
+            ww = float(w)
+            if ww <= 0:
+                continue
+            weighted.append(np.array(emb) * ww)
+            total_w += ww
+
+        if not weighted or total_w <= 0:
+            return None
+        return (np.sum(weighted, axis=0) / total_w).tolist()
+
+    def _calculate_section_means_sampled(
+            self, section_sample_articles: Dict[int, List[int]],
+            sample_embeddings: Dict[int,
+                                    List[float]]) -> Dict[int, List[float]]:
+        """Compute section mean embeddings from sampled articles per section.
+
+        Args:
+            section_sample_articles: Mapping section_id -> list of sampled article_ids.
+            sample_embeddings: Mapping article_id -> embedding vector for those samples.
+
+        Returns:
+            Mapping section_id -> mean embedding vector.
+        """
+        section_means: Dict[int, List[float]] = {}
+        for sid, article_ids in section_sample_articles.items():
+            embs = [
+                sample_embeddings[aid] for aid in article_ids
+                if aid in sample_embeddings
+            ]
+            if embs:
+                section_means[sid] = np.mean(np.array(embs), axis=0).tolist()
+        return section_means
+
+    def _mean_embedding(self, embeddings: List[List[float]]) -> List[float]:
+        """Compute mean vector."""
+        return np.mean(np.array(embeddings), axis=0).tolist()
+
+    def _postprocess(self, embedding: List[float]) -> List[float]:
+        """Optionally L2-normalize embedding vector.
+
+        Args:
+            embedding: Raw embedding vector.
+
+        Returns:
+            Post-processed embedding vector.
+        """
+        if not Config.ENABLE_L2_NORMALIZE:
+            return embedding
+        arr = np.array(embedding, dtype=np.float32)
+        norm = np.linalg.norm(arr)
+        if norm > 0:
+            arr = arr / norm
+        return arr.astype(float).tolist()
 
 
 @functions_framework.http
 def main(request):
+    """HTTP Cloud Function entry point.
+
+    Workflow:
+    1) Validate config.
+    2) Initialize DB/BQ clients.
+    3) Generate embeddings for all users (interaction-based or cold-start).
+    4) Upsert results to BigQuery in batches (single MERGE per batch).
+    5) Return JSON status.
+
+    Args:
+        request: Flask Request object (unused).
+
+    Returns:
+        Tuple of (response JSON dict, HTTP status code).
+    """
     try:
         Config.validate()
     except ValueError as e:
-        logger.error(f"Configuration validation error: {e}")
+        logger.error("Configuration validation error: %s", e)
         return f"Configuration validation error: {e}", 500
 
     try:
         # Initialize clients
-        db_client = DatabaseClient(Config.INSTANCE_CONNECTION_NAME,
-                                   Config.MYSQL_USERNAME,
-                                   Config.MYSQL_PASSWORD,
-                                   Config.MYSQL_DATABASE)
-
+        db_client = DatabaseClient(
+            Config.INSTANCE_CONNECTION_NAME,
+            Config.MYSQL_USERNAME,
+            Config.MYSQL_PASSWORD,
+            Config.MYSQL_DATABASE,
+        )
         bq_client = BigQueryClient(
             Config.PROJECT_ID,
             Config.RECOMMENDATION_DATASET,
             Config.P_ARTICLE_EMBEDDING_TABLE,
             Config.USER_EMBEDDING_TABLE,
         )
-        # Generate user embeddings
-        embedding_generator = UserEmbeddingGenerator(db_client, bq_client)
-        user_embeddings = embedding_generator.generate_user_embeddings()
 
-        # Save embeddings to BigQuery
+        # Generate embeddings for all users
+        embedding_generator = UserEmbeddingGenerator(db_client, bq_client)
+        user_embeddings = embedding_generator.generate_all_user_embeddings()
+
+        # Upsert to BigQuery with fewer queries (batched MERGE)
         if user_embeddings:
-            logger.info(
-                f"Saving {len(user_embeddings)} user embeddings to BigQuery..."
-            )
+            logger.info("Saving %d user embeddings to BigQuery...",
+                        len(user_embeddings))
             bq_client.upsert_user_embeddings_batch(user_embeddings)
 
         return {
@@ -567,13 +730,14 @@ def main(request):
             "processed_users":
             len(user_embeddings),
             "message":
-            f"Successfully generated and saved embeddings for {len(user_embeddings)} users"
+            f"Successfully generated and saved embeddings for {len(user_embeddings)} users",
         }, 200
 
     except Exception as e:
-        logger.error(f"Error in user embedding generation: {str(e)}",
+        logger.error("Error in user embedding generation: %s",
+                     str(e),
                      exc_info=True)
         return {
             "status": "error",
-            "message": f"Failed to generate user embeddings: {str(e)}"
+            "message": f"Failed to generate user embeddings: {str(e)}",
         }, 500
