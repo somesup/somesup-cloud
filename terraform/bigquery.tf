@@ -19,7 +19,7 @@ resource "google_bigquery_table" "p_article_embeddings" {
 
 }
 
-resource "google_bigquery_table" "user_p_article_scores" {
+resource "google_bigquery_table" "user_embeddings" {
   project             = var.project
   dataset_id          = google_bigquery_dataset.recommendation.dataset_id
   table_id            = "user_embeddings"
