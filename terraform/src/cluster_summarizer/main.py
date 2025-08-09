@@ -22,6 +22,15 @@ logging_client = google.cloud.logging.Client()
 logging_client.setup_logging()
 logger = logging.getLogger(__name__)
 
+SECTIONS = {
+    1: "politics",
+    2: "economy",
+    3: "society",
+    4: "culture",
+    5: "tech",
+    6: "world",
+}
+
 
 class Config:
     """Configuration class for environment variables and settings."""
@@ -78,7 +87,7 @@ class ProcessedArticle:
     one_line_summary: str
     full_summary: str
     language: str
-    section: str
+    section_id: int
     thumbnail_url: str
     region: Optional[str] = None
 
@@ -89,7 +98,7 @@ class ProcessedArticle:
                    one_line_summary=response['one_line_summary'],
                    full_summary=response['full_summary'],
                    language=response['language'],
-                   section=response['section'],
+                   section_id=response['section_id'],
                    region=response.get('region'),
                    thumbnail_url=response['thumbnail_url'])
 
@@ -101,7 +110,7 @@ class AiResponse:
     title: str
     one_line_summary: str
     full_summary: str
-    section: str
+    section_id: int
 
     @classmethod
     def from_dict(cls, response: Any) -> 'AiResponse':
@@ -110,7 +119,7 @@ class AiResponse:
             title=response['title'],
             one_line_summary=response['one_line_summary'],
             full_summary=response['full_summary'],
-            section=response['section'],
+            section_id=response['section_id'],
         )
 
 
@@ -211,66 +220,6 @@ class DatabaseClient:
             logger.error("Error fetching articles: %s", e)
             raise
 
-    def _get_section_id(
-        self,
-        connection: pymysql.connections.Connection,
-        section_name: str,
-    ) -> Optional[int]:
-        """Retrieve the ID of a section by its name.
-
-        Args:
-            connection: The database connection to use.
-            section_name: The name of the section to retrieve.
-        Returns:
-            The ID of the section if it exists, otherwise None.
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT id FROM article_section WHERE name = %s",
-                (section_name, ),
-            )
-            result = cursor.fetchone()
-            return result[0] if result else None
-
-    def _create_section(
-        self,
-        connection: pymysql.connections.Connection,
-        section_name: str,
-    ) -> int:
-        """Create a new section in the database and return its ID.
-        
-        Args:
-            connection: The database connection to use.
-            section_name: The name of the section to create.
-
-        Returns:
-            The ID of the newly created section.
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "INSERT INTO article_section (name) VALUES (%s)",
-                (section_name, ),
-            )
-            connection.commit()
-            return cursor.lastrowid
-
-    def _get_or_create_section(self, section_name: str) -> int:
-        """Get the ID of a section or create it if it doesn't exist.
-
-        Args:
-            section_name: The name of the section to retrieve or create.
-
-        Returns:
-            The ID of the section.
-        """
-
-        with self._get_connection() as conn:
-            section_id = self._get_section_id(conn, section_name)
-            if section_id is not None:
-                return section_id
-
-            return self._create_section(conn, section_name)
-
     def save_processed_article_with_references(
             self, article: ProcessedArticle,
             articles: list[SimpleArticle]) -> int:
@@ -281,7 +230,6 @@ class DatabaseClient:
         try:
             with self._get_connection() as connection:
                 with connection.cursor() as cursor:
-                    section_id = self._get_or_create_section(article.section)
 
                     # Insert processed article
                     insert_sql = """
@@ -294,7 +242,7 @@ class DatabaseClient:
                         article.full_summary,
                         article.language,
                         article.region,
-                        section_id,
+                        article.section_id,
                         articles[0].thumbnail_url,
                     ))
 
@@ -370,9 +318,6 @@ class VertexAiClient:
 
     # Constants for better maintainability
     MODEL_NAME = "google/gemini-2.5-pro"
-    VALID_SECTIONS = [
-        "politics", "economy", "society", "culture", "tech", "world"
-    ]
 
     def __init__(self, project: str, location: str):
         self._project = project
@@ -411,14 +356,15 @@ class VertexAiClient:
               "title": "핵심 주제 제목 (40자 이내)",
               "oneLineSummary": "핵심 내용 한 문장 요약 (60자 이내)",
               "full_summary": "마크다운 형식 상세 내용 (1000자 이내)",
-              "section": "politics/economy/society/culture/tech/world 중 선택"
+              "section": "1: politics, 2: economy, 3: society, 4: culture, 5:tech, 6: world 중 선택하여 integer 반환"
             }}
         """
 
     def _get_response_schema(self) -> dict:
         """Get the JSON schema for AI response validation."""
         return {
-            "type": "object",
+            "type":
+            "object",
             "properties": {
                 "title": {
                     "type": "string"
@@ -429,13 +375,12 @@ class VertexAiClient:
                 "full_summary": {
                     "type": "string"
                 },
-                "section": {
-                    "type": "string",
-                    "enum": self.VALID_SECTIONS
+                "section_id": {
+                    "type": "integer",
                 }
             },
             "required":
-            ["title", "one_line_summary", "full_summary", "section"],
+            ["title", "one_line_summary", "full_summary", "section_id"],
         }
 
     def generate_summary(
@@ -463,6 +408,8 @@ class VertexAiClient:
                     "response_schema": response_schema,
                 })
 
+            print("Response:", response.parsed)
+
             ai_response = AiResponse.from_dict(response.parsed)
             logger.info("Successfully generated summary: '%s'",
                         ai_response.title)
@@ -475,11 +422,10 @@ class VertexAiClient:
 
     def get_embeddings(
         self,
-        titles: str,
-        contents: str,
+        article: ProcessedArticle,
     ) -> list[google.genai.types.ContentEmbedding] | None:
         result = self._client.models.embed_content(
-            contents=f"{titles}\n\n{contents}",
+            contents=f"{article.title}\n\n{article.full_summary}",
             model="text-embedding-004",
             config=google.genai.types.EmbedContentConfig(
                 output_dimensionality=768),
@@ -505,12 +451,14 @@ class BigQueryClient:
     def upload_embedding_to_bq(
         self,
         processed_id: int,
+        section_id: int,
         embedding: list[google.genai.types.ContentEmbedding] | None,
     ) -> None:
         """Upload the embedding vector to BigQuery.
 
         Args:
             processed_id: The ID of the processed article.
+            section_id: The section ID of the processed article.
             embedding: The embedding vector to upload.
         """
         if embedding is None or len(embedding) == 0:
@@ -523,6 +471,7 @@ class BigQueryClient:
 
         rows_to_insert = [{
             "p_article_id": processed_id,
+            "section_id": section_id,
             "embedding_vector": embedding[0].values,
             "created_at": now.isoformat(),
             "updated_at": now.isoformat(),
@@ -596,7 +545,7 @@ class ArticleSummarizer:
             one_line_summary=ai_response.one_line_summary,
             full_summary=ai_response.full_summary,
             language="ko",  # TODO: Determine language dynamically if needed
-            section=ai_response.section,
+            section_id=ai_response.section_id,
             thumbnail_url=best_thumbnail_url or articles[0].thumbnail_url,
             region=None,  # TODO: Find a good way to determine region
         )
@@ -606,13 +555,11 @@ class ArticleSummarizer:
             processed_article, articles)
 
         # Generate and upload embeddings to BigQuery
-        embeddings = self.ai_client.get_embeddings(
-            processed_article.title,
-            processed_article.full_summary,
-        )
+        embeddings = self.ai_client.get_embeddings(processed_article)
 
         self._bq_client.upload_embedding_to_bq(
             processed_id,
+            processed_article.section_id,
             embeddings,
         )
 
