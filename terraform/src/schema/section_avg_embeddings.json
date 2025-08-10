@@ -1,18 +1,17 @@
 [
   {
     "name": "section_id",
-    "type": "INT64",
+    "type": "INTEGER",
     "mode": "REQUIRED"
   },
   {
     "name": "avg_embedding_vector",
-    "type": "FLOAT64",
+    "type": "FLOAT",
     "mode": "REPEATED"
   },
   {
     "name": "updated_at",
     "type": "TIMESTAMP",
-    "mode": "REQUIRED",
-    "defaultValueExpression": "CURRENT_TIMESTAMP()"
+    "mode": "NULLABLE"
   }
 ]
