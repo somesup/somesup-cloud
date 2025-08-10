@@ -1,0 +1,6 @@
+functions-framework==3.8.3
+PyMySQL==1.1.1
+cloud-sql-python-connector==1.18.1
+google-cloud-logging==3.12.1
+google-cloud-bigquery==3.32.0
+numpy==2.2.6
