@@ -131,6 +131,10 @@ export const updateUserSectionPreferences = async (req: AuthenticatedRequest, re
     await userService.updateUserSectionPreferences(userId, parsed.data)
 
     const updatedPrefs = await sectionService.getSectionPreferencesByUserId(userId)
+
+    // 사용자 임베딩 벡터 업데이트 요청
+    await userService.requestUpdateUserEmbedding(userId)
+
     return success(res, updatedPrefs, {
       message: 'User section preferences updated successfully',
     })

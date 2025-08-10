@@ -2,6 +2,9 @@ import { prisma } from '../../prisma/prisma'
 import { User } from '@prisma/client'
 import { UpdateUserRequest, UpdateUserSectionPreferenceRequest } from '../types/user'
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
+import { getGcpAuthHeader } from '../utils/googleAuth'
+import { RECALCULATE_USER_EMBEDDING_URL } from '../config/gcp'
+import axios from 'axios'
 
 export class UserNotFoundError extends Error {
   constructor(message: string) {
@@ -167,5 +170,28 @@ export const userService = {
     } catch (error) {
       throw new Error('Failed to update user section preferences')
     }
+  },
+
+  /**
+   * 사용자 임베딩 업데이트 요청을 GCP에 보냅니다.
+   * @param {number} userId - 임베딩을 업데이트할 사용자의 ID
+   * @returns {Promise<boolean>} 요청 성공 여부
+   * @throws {Error} 요청 실패 시 오류 발생
+   */
+  requestUpdateUserEmbedding: async (userId: number): Promise<boolean> => {
+    const authHeader = await getGcpAuthHeader(RECALCULATE_USER_EMBEDDING_URL)
+    const response = await axios.post(RECALCULATE_USER_EMBEDDING_URL, {
+      json: { userId },
+      responseType: 'json',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: authHeader,
+      },
+    })
+
+    if (response.status !== 200) {
+      throw new Error('Failed to request user embedding update')
+    }
+    return true
   },
 }

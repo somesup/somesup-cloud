@@ -3,6 +3,11 @@ import { prismaMock } from '../../../prisma/mock'
 import { User, ArticleSection } from '@prisma/client'
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
 import { UpdateUserSectionPreferenceRequest } from '../../types/user'
+import { getGcpAuthHeader } from '../../utils/googleAuth'
+import axios from 'axios'
+import { RECALCULATE_USER_EMBEDDING_URL } from '../../config/gcp'
+
+jest.mock('../../utils/googleAuth')
 
 describe('userService', () => {
   const mockUser: User = {
@@ -200,6 +205,48 @@ describe('userService', () => {
       await expect(userService.updateUserSectionPreferences(1, preferences)).rejects.toThrow(
         'Failed to update user section preferences',
       )
+    })
+  })
+
+  describe('requestUpdateUserEmbedding', () => {
+    const FAKE_HEADER = 'Bearer test'
+    const USER_ID = 123
+
+    beforeEach(() => {
+      jest.clearAllMocks()
+    })
+
+    it('should send embedding request and return true on status 200', async () => {
+      ;(getGcpAuthHeader as jest.Mock).mockResolvedValue(FAKE_HEADER)
+      jest.spyOn(axios, 'post').mockResolvedValue({ status: 200 })
+
+      const result = await userService.requestUpdateUserEmbedding(USER_ID)
+      expect(getGcpAuthHeader).toHaveBeenCalledWith(RECALCULATE_USER_EMBEDDING_URL)
+      expect(axios.post).toHaveBeenCalledWith(RECALCULATE_USER_EMBEDDING_URL, {
+        json: { userId: USER_ID },
+        responseType: 'json',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: FAKE_HEADER,
+        },
+      })
+      expect(result).toBe(true)
+    })
+
+    it('should throw an error if status is not 200', async () => {
+      ;(getGcpAuthHeader as jest.Mock).mockResolvedValue(FAKE_HEADER)
+      jest.spyOn(axios, 'post').mockResolvedValue({ status: 400 })
+
+      await expect(userService.requestUpdateUserEmbedding(USER_ID)).rejects.toThrow(
+        'Failed to request user embedding update',
+      )
+    })
+
+    it('should throw an error if axios throws', async () => {
+      ;(getGcpAuthHeader as jest.Mock).mockResolvedValue(FAKE_HEADER)
+      jest.spyOn(axios, 'post').mockRejectedValue(new Error('Network Error'))
+
+      await expect(userService.requestUpdateUserEmbedding(USER_ID)).rejects.toThrow('Network Error')
     })
   })
 })
