@@ -4,7 +4,7 @@ import datetime
 import json
 import logging
 import os
-from typing import Dict, Iterator, List, Optional, Sequence, Tuple, TypeVar
+from typing import Iterator, Optional, Sequence, TypeVar
 
 import functions_framework
 import google.cloud.logging
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
-def chunked(seq: Sequence[T], n: int) -> List[List[T]]:
+def chunked(seq: Sequence[T], n: int) -> list[list[T]]:
     """Split a sequence into chunks of size n.
 
     Args:
@@ -132,7 +132,7 @@ class DatabaseClient:
             if connection:
                 connection.close()
 
-    def get_all_user_ids(self) -> List[int]:
+    def get_all_user_ids(self) -> list[int]:
         """Fetch all user IDs.
 
         Returns:
@@ -389,7 +389,7 @@ class BigQueryClient:
         return embeddings
 
     def upsert_user_embeddings_bulk(
-            self, rows: List[Tuple[int, List[float]]]) -> None:
+            self, rows: list[tuple[int, list[float]]]) -> None:
         """Bulk upsert user embeddings with a single MERGE using inline arrays.
 
         Args:
@@ -431,7 +431,7 @@ class BigQueryClient:
         self._bq_client.query(query, job_config=job_config).result()
 
     def upsert_user_embeddings_batch(
-            self, user_embeddings: Dict[int, List[float]]) -> None:
+            self, user_embeddings: dict[int, list[float]]) -> None:
         """Upsert user embeddings in batches to reduce query count.
 
         Args:
@@ -439,7 +439,7 @@ class BigQueryClient:
         """
         if not user_embeddings:
             return
-        items: List[Tuple[int, List[float]]] = list(user_embeddings.items())
+        items: list[tuple[int, list[float]]] = list(user_embeddings.items())
         for batch in chunked(items, Config.BATCH_SIZE_BQ_UPSERT):
             self.upsert_user_embeddings_bulk(batch)
 
@@ -455,7 +455,7 @@ class UserEmbeddingGenerator:
     def generate_all_user_embeddings(
             self,
             start_date: Optional[datetime.date] = None
-    ) -> Dict[int, List[float]]:
+    ) -> dict[int, list[float]]:
         """Generate embeddings for all users.
 
         Strategy:
@@ -507,7 +507,7 @@ class UserEmbeddingGenerator:
             all_user_ids)
 
         # Step 4: Interaction-based embeddings
-        user_embeddings: Dict[int, List[float]] = {}
+        user_embeddings: dict[int, list[float]] = {}
         for user_id in interacted_user_ids:
             emb = self._compute_user_embedding(
                 likes.get(user_id, []),
@@ -523,7 +523,7 @@ class UserEmbeddingGenerator:
         # Step 5: Section means via sampled articles (avoid full table scan)
         section_sample_articles = self.db_client.get_section_sample_articles(
             Config.SECTION_MEAN_SAMPLE_SIZE)
-        sample_article_ids: List[int] = [
+        sample_article_ids: list[int] = [
             aid for lst in section_sample_articles.values() for aid in lst
         ]
         sample_embeddings = self.bq_client.get_p_article_embeddings_batch(
@@ -533,7 +533,7 @@ class UserEmbeddingGenerator:
             section_sample_articles, sample_embeddings)
 
         # Fallback global mean (from samples as well)
-        global_mean_embedding: Optional[List[float]] = (self._mean_embedding(
+        global_mean_embedding: Optional[list[float]] = (self._mean_embedding(
             list(sample_embeddings.values())) if sample_embeddings else None)
 
         # Step 6: Cold-start users using section preferences
@@ -555,13 +555,13 @@ class UserEmbeddingGenerator:
 
     def _compute_user_embedding(
         self,
-        liked_articles: List[int],
-        scraped_articles: List[int],
-        viewed_articles: List[int],
-        article_embeddings: Dict[int, List[float]],
-        article_sections: Dict[int, int],
-        user_section_preferences: Dict[int, float],
-    ) -> Optional[List[float]]:
+        liked_articles: list[int],
+        scraped_articles: list[int],
+        viewed_articles: list[int],
+        article_embeddings: dict[int, list[float]],
+        article_sections: dict[int, int],
+        user_section_preferences: dict[int, float],
+    ) -> Optional[list[float]]:
         """Compute interaction-based user embedding using weighted average.
 
         Args:
@@ -604,8 +604,8 @@ class UserEmbeddingGenerator:
         return user_embedding.tolist()
 
     def _section_preference_embedding(
-            self, user_section_preferences: Dict[int, float],
-            section_means: Dict[int, List[float]]) -> Optional[List[float]]:
+            self, user_section_preferences: dict[int, float],
+            section_means: dict[int, list[float]]) -> Optional[list[float]]:
         """Compute section-preference weighted embedding for cold-start users.
 
         Args:
@@ -632,9 +632,9 @@ class UserEmbeddingGenerator:
         return (np.sum(weighted, axis=0) / total_w).tolist()
 
     def _calculate_section_means_sampled(
-            self, section_sample_articles: Dict[int, List[int]],
-            sample_embeddings: Dict[int,
-                                    List[float]]) -> Dict[int, List[float]]:
+            self, section_sample_articles: dict[int, list[int]],
+            sample_embeddings: dict[int,
+                                    list[float]]) -> dict[int, list[float]]:
         """Compute section mean embeddings from sampled articles per section.
 
         Args:
@@ -644,7 +644,7 @@ class UserEmbeddingGenerator:
         Returns:
             Mapping section_id -> mean embedding vector.
         """
-        section_means: Dict[int, List[float]] = {}
+        section_means: dict[int, list[float]] = {}
         for sid, article_ids in section_sample_articles.items():
             embs = [
                 sample_embeddings[aid] for aid in article_ids
@@ -654,11 +654,11 @@ class UserEmbeddingGenerator:
                 section_means[sid] = np.mean(np.array(embs), axis=0).tolist()
         return section_means
 
-    def _mean_embedding(self, embeddings: List[List[float]]) -> List[float]:
+    def _mean_embedding(self, embeddings: list[list[float]]) -> list[float]:
         """Compute mean vector."""
         return np.mean(np.array(embeddings), axis=0).tolist()
 
-    def _postprocess(self, embedding: List[float]) -> List[float]:
+    def _postprocess(self, embedding: list[float]) -> list[float]:
         """Optionally L2-normalize embedding vector.
 
         Args:
