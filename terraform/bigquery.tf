@@ -1,3 +1,7 @@
+locals {
+  section_avg_embeddings_limit = 20
+}
+
 resource "google_bigquery_dataset" "recommendation" {
   project     = var.project
   dataset_id  = "recommendation"
@@ -86,7 +90,7 @@ resource "google_bigquery_data_transfer_config" "section_avg_embeddings_update" 
         QUALIFY ROW_NUMBER() OVER (
           PARTITION BY section_id
           ORDER BY updated_at DESC
-        ) <= 20 -- 섹션 ID별로 최신 20개의 임베딩 벡터만 사용
+        ) <= ${local.section_avg_embeddings_limit}
       ), UNNEST(embedding_vector) AS dim_val WITH OFFSET
     )
     SELECT
