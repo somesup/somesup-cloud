@@ -117,4 +117,40 @@ export const articleService = {
       },
     })
   },
+
+  /**
+   * 특정 기사에 사용자가 좋아요를 추가합니다.
+   * @param userId - 좋아요를 추가할 사용자의 ID
+   * @param articleId - 좋아요를 추가할 기사의 ID
+   * @return Promise<void> - 좋아요 추가가 완료되면 반환되는 프로미스
+   * @example
+   * // 사용자 1이 기사 2에 좋아요를 추가
+   * addLikeToArticle(1, 2)
+   */
+  addLikeToArticle: async (userId: number, articleId: number): Promise<void> => {
+    await prisma.like.create({
+      data: {
+        user_id: userId,
+        p_article_id: articleId,
+      },
+    })
+  },
+
+  /**
+   * 특정 기사에 사용자가 좋아요를 제거합니다.
+   * @param userId - 좋아요를 제거할 사용자의 ID
+   * @param articleId - 좋아요를 제거할 기사의 ID
+   * @return Promise<void> - 좋아요 제거가 완료되면 반환되는 프로미스
+   * @example
+   * // 사용자 1이 기사 2에 좋아요를 제거
+   * removeLikeFromArticle(1, 2)
+   */
+  removeLikeFromArticle: async (userId: number, articleId: number): Promise<void> => {
+    await prisma.like.deleteMany({
+      where: {
+        user_id: userId,
+        p_article_id: articleId,
+      },
+    })
+  },
 }

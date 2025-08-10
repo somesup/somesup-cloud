@@ -1,6 +1,13 @@
-import { getArticles, getArticleById, storeArticleViewEvent } from '../articleController'
+import {
+  getArticles,
+  getArticleById,
+  storeArticleViewEvent,
+  addLikeToArticle,
+  removeLikeFromArticle,
+} from '../articleController'
 import { ArticleNotFoundError, articleService } from '../../services/articleService'
 import { successWithCursor, success, errors } from '../../utils/response'
+import { prismaMock } from '../../../prisma/mock'
 
 jest.mock('../../services/articleService')
 jest.mock('../../utils/response')
@@ -176,6 +183,112 @@ describe('articleController', () => {
       await storeArticleViewEvent(req as any, res as any)
 
       expect(consoleErrorSpy).toHaveBeenCalledWith('Error storing article view event:', error)
+      expect(mockInternalError).toHaveBeenCalledWith(res)
+      expect(mockSuccess).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('addLikeToArticle', () => {
+    it('should add like to article and respond with success', async () => {
+      req.userId = 1
+      req.params.id = '42'
+      ;(articleService.getArticleById as jest.Mock).mockResolvedValue({ id: 42 })
+
+      await addLikeToArticle(req as any, res as any)
+
+      expect(articleService.addLikeToArticle).toHaveBeenCalledWith(1, 42)
+      expect(mockSuccess).toHaveBeenCalledWith(res, null, {
+        message: 'Like added to article successfully',
+      })
+    })
+
+    it('should return unauthorized if userId is missing', async () => {
+      req.userId = null
+      req.params.id = '42'
+      ;(articleService.getArticleById as jest.Mock).mockResolvedValue({ id: 42 })
+
+      await addLikeToArticle(req as any, res as any)
+
+      expect(errors.unauthorized).toHaveBeenCalledWith(res, 'User ID is required')
+      expect(mockSuccess).not.toHaveBeenCalled()
+    })
+
+    it('should return not found if article does not exist', async () => {
+      req.userId = 1
+      req.params.id = '42'
+      ;(articleService.getArticleById as jest.Mock).mockRejectedValue(new ArticleNotFoundError('Article not found'))
+
+      await addLikeToArticle(req as any, res as any)
+
+      expect(mockSuccess).not.toHaveBeenCalled()
+      expect(errors.notFound).toHaveBeenCalledWith(res, 'Article not found')
+      expect(articleService.addLikeToArticle).not.toHaveBeenCalled()
+    })
+
+    it('should respond with internal error on service exception', async () => {
+      req.userId = 1
+      req.params.id = '42'
+      ;(articleService.getArticleById as jest.Mock).mockResolvedValue({ id: 42 })
+
+      const error = new Error('Service error')
+      ;(articleService.addLikeToArticle as jest.Mock).mockRejectedValue(error)
+
+      await addLikeToArticle(req as any, res as any)
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error adding like to article:', error)
+      expect(mockInternalError).toHaveBeenCalledWith(res)
+      expect(mockSuccess).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('removeLikeFromArticle', () => {
+    it('should remove like from article and respond with success', async () => {
+      req.userId = 1
+      req.params.id = '42'
+      ;(articleService.getArticleById as jest.Mock).mockResolvedValue({ id: 42 })
+
+      await removeLikeFromArticle(req as any, res as any)
+
+      expect(articleService.removeLikeFromArticle).toHaveBeenCalledWith(1, 42)
+      expect(mockSuccess).toHaveBeenCalledWith(res, null, {
+        message: 'Like removed from article successfully',
+      })
+    })
+
+    it('should return unauthorized if userId is missing', async () => {
+      req.userId = null
+      req.params.id = '42'
+      ;(articleService.getArticleById as jest.Mock).mockResolvedValue({ id: 42 })
+
+      await removeLikeFromArticle(req as any, res as any)
+
+      expect(errors.unauthorized).toHaveBeenCalledWith(res, 'User ID is required')
+      expect(mockSuccess).not.toHaveBeenCalled()
+    })
+
+    it('should return not found if article does not exist', async () => {
+      req.userId = 1
+      req.params.id = '42'
+      ;(articleService.getArticleById as jest.Mock).mockRejectedValue(new ArticleNotFoundError('Article not found'))
+
+      await removeLikeFromArticle(req as any, res as any)
+
+      expect(mockSuccess).not.toHaveBeenCalled()
+      expect(errors.notFound).toHaveBeenCalledWith(res, 'Article not found')
+      expect(articleService.removeLikeFromArticle).not.toHaveBeenCalled()
+    })
+
+    it('should respond with internal error on service exception', async () => {
+      req.userId = 1
+      req.params.id = '42'
+      ;(articleService.getArticleById as jest.Mock).mockResolvedValue({ id: 42 })
+
+      const error = new Error('Service error')
+      ;(articleService.removeLikeFromArticle as jest.Mock).mockRejectedValue(error)
+
+      await removeLikeFromArticle(req as any, res as any)
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error removing like from article:', error)
       expect(mockInternalError).toHaveBeenCalledWith(res)
       expect(mockSuccess).not.toHaveBeenCalled()
     })
