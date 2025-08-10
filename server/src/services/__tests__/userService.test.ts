@@ -222,14 +222,17 @@ describe('userService', () => {
 
       const result = await userService.requestUpdateUserEmbedding(USER_ID)
       expect(getGcpAuthHeader).toHaveBeenCalledWith(RECALCULATE_USER_EMBEDDING_URL)
-      expect(axios.post).toHaveBeenCalledWith(RECALCULATE_USER_EMBEDDING_URL, {
-        json: { userId: USER_ID },
-        responseType: 'json',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: FAKE_HEADER,
+      expect(axios.post).toHaveBeenCalledWith(
+        RECALCULATE_USER_EMBEDDING_URL,
+        { userId: USER_ID },
+        {
+          responseType: 'json',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: FAKE_HEADER,
+          },
         },
-      })
+      )
       expect(result).toBe(true)
     })
 

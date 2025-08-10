@@ -180,14 +180,17 @@ export const userService = {
    */
   requestUpdateUserEmbedding: async (userId: number): Promise<boolean> => {
     const authHeader = await getGcpAuthHeader(RECALCULATE_USER_EMBEDDING_URL)
-    const response = await axios.post(RECALCULATE_USER_EMBEDDING_URL, {
-      json: { userId },
-      responseType: 'json',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: authHeader,
+    const response = await axios.post(
+      RECALCULATE_USER_EMBEDDING_URL,
+      { userId },
+      {
+        responseType: 'json',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: authHeader,
+        },
       },
-    })
+    )
 
     if (response.status !== 200) {
       throw new Error('Failed to request user embedding update')
