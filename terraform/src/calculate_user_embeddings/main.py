@@ -53,6 +53,8 @@ class Config:
     RECOMMENDATION_DATASET = os.getenv("RECOMMENDATION_DATASET", "")
     P_ARTICLE_EMBEDDING_TABLE = os.getenv("P_ARTICLE_EMBEDDING_TABLE", "")
     USER_EMBEDDING_TABLE = os.getenv("USER_EMBEDDING_TABLE", "")
+    SECTION_AVG_EMBEDDINGS_TABLE = os.getenv("SECTION_AVG_EMBEDDINGS_TABLE",
+                                             "")  # Section 평균 테이블명
 
     # Action weights
     LIKE_WEIGHT = 3
@@ -63,8 +65,6 @@ class Config:
     ENABLE_L2_NORMALIZE = True
 
     # Performance tuning
-    SECTION_MEAN_SAMPLE_SIZE = int(os.getenv("SECTION_MEAN_SAMPLE_SIZE",
-                                             "50"))  # per section
     BATCH_SIZE_BQ_UPSERT = int(os.getenv("BATCH_SIZE_BQ_UPSERT",
                                          "500"))  # rows per MERGE
 
@@ -89,6 +89,8 @@ class Config:
             raise ValueError("P_ARTICLE_EMBEDDING_TABLE is not set.")
         if not cls.USER_EMBEDDING_TABLE:
             raise ValueError("USER_EMBEDDING_TABLE is not set.")
+        if not cls.SECTION_AVG_EMBEDDINGS_TABLE:
+            raise ValueError("SECTION_AVG_EMBEDDINGS_TABLE is not set.")
 
 
 class DatabaseClient:
@@ -302,38 +304,6 @@ class DatabaseClient:
                     article_sections[int(row["id"])] = int(row["section_id"])
         return article_sections
 
-    def get_section_sample_articles(
-            self, limit_per_section: int) -> dict[int, list[int]]:
-        """Fetch a small sample of article IDs per section.
-
-        This is used to approximate section mean embeddings without scanning all articles.
-
-        Args:
-            limit_per_section: Number of articles to sample per section.
-
-        Returns:
-            Mapping section_id -> list of sampled article_ids.
-        """
-        query = f"""
-        SELECT section_id, id
-        FROM (
-            SELECT
-              section_id,
-              id,
-              ROW_NUMBER() OVER (PARTITION BY section_id ORDER BY id DESC) AS rn
-            FROM processed_article
-        ) t
-        WHERE rn <= %s
-        """
-        by_section: dict[int, list[int]] = collections.defaultdict(list)
-        with self.get_connection() as conn:
-            with conn.cursor(pymysql.cursors.DictCursor) as cursor:
-                cursor.execute(query, (limit_per_section, ))
-                rows = cursor.fetchall()
-        for row in rows:
-            by_section[int(row["section_id"])].append(int(row["id"]))
-        return by_section
-
 
 class BigQueryClient:
     """Client for managing BigQuery operations."""
@@ -344,6 +314,7 @@ class BigQueryClient:
         recommendation_dataset: str,
         p_article_embedding_table: str,
         user_embedding_table: str,
+        section_avg_embeddings_table: str,
     ):
         """Initialize BigQuery client.
 
@@ -357,6 +328,7 @@ class BigQueryClient:
         self._recommendation_dataset = recommendation_dataset
         self._p_article_embedding_table = p_article_embedding_table
         self._user_embedding_table = user_embedding_table
+        self._section_avg_embeddings_table = section_avg_embeddings_table
         self._bq_client = bigquery.Client(project=self._project)
 
     def get_p_article_embeddings_batch(
@@ -387,6 +359,23 @@ class BigQueryClient:
             if row.embedding_vector:
                 embeddings[int(row.p_article_id)] = list(row.embedding_vector)
         return embeddings
+
+    def get_section_avg_embeddings(self) -> dict[int, list[float]]:
+        """Fetch average embeddings for each section.
+
+        Returns:
+            Mapping section_id -> avg_embedding_vector.
+        """
+        query = f"""
+        SELECT section_id, avg_embedding_vector
+        FROM `{self._project}.{self._recommendation_dataset}.{self._section_avg_embeddings_table}`
+        """
+        results = self._bq_client.query(query).result()
+        section_means = {}
+        for row in results:
+            section_means[int(row.section_id)] = list(row.avg_embedding_vector)
+
+        return section_means
 
     def upsert_user_embeddings_bulk(
             self, rows: list[tuple[int, list[float]]]) -> None:
@@ -462,7 +451,7 @@ class UserEmbeddingGenerator:
         - Users with interactions: weighted average of interacted article embeddings
           using action weights multiplied by user's section preference.
         - Users without interactions: section-preference-weighted average of section mean embeddings.
-          Section means are approximated via small samples per section.
+          Section means are taken from BigQuery section_avg_embeddings table.
 
         Args:
             start_date: Interactions since this date (default: 30 days ago).
@@ -520,21 +509,19 @@ class UserEmbeddingGenerator:
             if emb is not None:
                 user_embeddings[user_id] = self._postprocess(emb)
 
-        # Step 5: Section means via sampled articles (avoid full table scan)
-        section_sample_articles = self.db_client.get_section_sample_articles(
-            Config.SECTION_MEAN_SAMPLE_SIZE)
-        sample_article_ids: list[int] = [
-            aid for lst in section_sample_articles.values() for aid in lst
-        ]
-        sample_embeddings = self.bq_client.get_p_article_embeddings_batch(
-            sample_article_ids)
+        # Step 5: Section means from BigQuery
+        section_means = self.bq_client.get_section_avg_embeddings()
 
-        section_means = self._calculate_section_means_sampled(
-            section_sample_articles, sample_embeddings)
-
-        # Fallback global mean (from samples as well)
-        global_mean_embedding: Optional[list[float]] = (self._mean_embedding(
-            list(sample_embeddings.values())) if sample_embeddings else None)
+        # Fallback global mean (from section means)
+        global_mean_embedding: Optional[list[float]] = None
+        if section_means:
+            global_mean_embedding = np.mean(np.array(
+                list(section_means.values())),
+                                            axis=0).tolist()
+        else:
+            logger.warning(
+                "No section means found in BigQuery. Global mean embedding will not be used."
+            )
 
         # Step 6: Cold-start users using section preferences
         for user_id in all_user_ids:
@@ -631,33 +618,6 @@ class UserEmbeddingGenerator:
             return None
         return (np.sum(weighted, axis=0) / total_w).tolist()
 
-    def _calculate_section_means_sampled(
-            self, section_sample_articles: dict[int, list[int]],
-            sample_embeddings: dict[int,
-                                    list[float]]) -> dict[int, list[float]]:
-        """Compute section mean embeddings from sampled articles per section.
-
-        Args:
-            section_sample_articles: Mapping section_id -> list of sampled article_ids.
-            sample_embeddings: Mapping article_id -> embedding vector for those samples.
-
-        Returns:
-            Mapping section_id -> mean embedding vector.
-        """
-        section_means: dict[int, list[float]] = {}
-        for sid, article_ids in section_sample_articles.items():
-            embs = [
-                sample_embeddings[aid] for aid in article_ids
-                if aid in sample_embeddings
-            ]
-            if embs:
-                section_means[sid] = np.mean(np.array(embs), axis=0).tolist()
-        return section_means
-
-    def _mean_embedding(self, embeddings: list[list[float]]) -> list[float]:
-        """Compute mean vector."""
-        return np.mean(np.array(embeddings), axis=0).tolist()
-
     def _postprocess(self, embedding: list[float]) -> list[float]:
         """Optionally L2-normalize embedding vector.
 
@@ -712,6 +672,7 @@ def main(request):
             Config.RECOMMENDATION_DATASET,
             Config.P_ARTICLE_EMBEDDING_TABLE,
             Config.USER_EMBEDDING_TABLE,
+            Config.SECTION_AVG_EMBEDDINGS_TABLE,
         )
 
         # Generate embeddings for all users
