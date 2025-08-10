@@ -324,4 +324,56 @@ describe('ArticleService', () => {
       expect(articleError.name).not.toBe(genericError.name)
     })
   })
+
+  describe('addLikeToArticle', () => {
+    it('Successfully adds a like to an article', async () => {
+      const userId = 1
+      const articleId = 2
+
+      await articleService.addLikeToArticle(userId, articleId)
+
+      expect(prismaMock.like.create).toHaveBeenCalledWith({
+        data: {
+          user_id: userId,
+          p_article_id: articleId,
+        },
+      })
+    })
+
+    it('Throws error when Prisma returns an error', async () => {
+      const userId = 1
+      const articleId = 2
+      const error = new Error('Database connection failed')
+      prismaMock.like.create.mockRejectedValue(error)
+
+      await expect(articleService.addLikeToArticle(userId, articleId)).rejects.toThrow('Database connection failed')
+    })
+  })
+
+  describe('removeLikeFromArticle', () => {
+    it('Successfully removes a like from an article', async () => {
+      const userId = 1
+      const articleId = 2
+
+      await articleService.removeLikeFromArticle(userId, articleId)
+
+      expect(prismaMock.like.deleteMany).toHaveBeenCalledWith({
+        where: {
+          user_id: userId,
+          p_article_id: articleId,
+        },
+      })
+    })
+
+    it('Throws error when Prisma returns an error', async () => {
+      const userId = 1
+      const articleId = 2
+      const error = new Error('Database connection failed')
+      prismaMock.like.deleteMany.mockRejectedValue(error)
+
+      await expect(articleService.removeLikeFromArticle(userId, articleId)).rejects.toThrow(
+        'Database connection failed',
+      )
+    })
+  })
 })

@@ -116,3 +116,67 @@ export const storeArticleViewEvent = async (req: AuthenticatedRequest, res: Resp
     return errors.internal(res)
   }
 }
+
+/**
+ * 특정 기사에 사용자가 좋아요를 추가하는 컨트롤러입니다.
+ * 사용자가 인증된 상태에서 특정 기사에 좋아요를 추가할 수 있습니다.
+ * @param {AuthenticatedRequest} req - 인증된 사용자 요청 객체. userId와 body에 articleId가 포함되어야 합니다.
+ * @param {Response} res - Express 응답 객체.
+ * @example
+ * // 요청 예시
+ * POST /api/articles/:id/like
+ */
+export const addLikeToArticle = async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.userId
+  if (!userId) {
+    return errors.unauthorized(res, 'User ID is required')
+  }
+
+  const articleId = parseInt(req.params.id, 10)
+
+  try {
+    const article = await articleService.getArticleById(articleId)
+    await articleService.addLikeToArticle(userId, article.id)
+    return success(res, null, {
+      message: 'Like added to article successfully',
+    })
+  } catch (error) {
+    if (error instanceof ArticleNotFoundError) {
+      return errors.notFound(res, 'Article not found')
+    }
+    console.error('Error adding like to article:', error)
+    return errors.internal(res)
+  }
+}
+
+/**
+ * 특정 기사에 사용자가 좋아요를 제거하는 컨트롤러입니다.
+ * 사용자가 인증된 상태에서 특정 기사에 좋아요를 제거할 수 있습니다.
+ * @param {AuthenticatedRequest} req - 인증된 사용자 요청 객체. userId와 body에 articleId가 포함되어야 합니다.
+ * @param {Response} res - Express 응답 객체.
+ * @example
+ * // 요청 예시
+ * DELETE /api/articles/:id/like
+ */
+export const removeLikeFromArticle = async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.userId
+  if (!userId) {
+    return errors.unauthorized(res, 'User ID is required')
+  }
+
+  const articleId = parseInt(req.params.id, 10)
+
+  try {
+    const article = await articleService.getArticleById(articleId)
+    await articleService.removeLikeFromArticle(userId, article.id)
+    return success(res, null, {
+      message: 'Like removed from article successfully',
+    })
+  } catch (error) {
+    if (error instanceof ArticleNotFoundError) {
+      return errors.notFound(res, 'Article not found')
+    }
+    console.error('Error removing like from article:', error)
+    return errors.internal(res)
+  }
+}

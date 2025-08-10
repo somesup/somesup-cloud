@@ -1,5 +1,11 @@
 import { Router } from 'express'
-import { getArticles, getArticleById, storeArticleViewEvent } from '../controllers/articleController'
+import {
+  getArticles,
+  getArticleById,
+  storeArticleViewEvent,
+  addLikeToArticle,
+  removeLikeFromArticle,
+} from '../controllers/articleController'
 import { authenticateJWT } from '../middlewares/authenticateJWT'
 
 const router = Router()
@@ -15,6 +21,18 @@ router.get('/', getArticles)
  * GET /:id
  */
 router.get('/:id', getArticleById)
+
+/**
+ * 특정 기사에 좋아요 추가
+ * POST /:id/like
+ */
+router.post('/:id/like', authenticateJWT, addLikeToArticle)
+
+/**
+ * 특정 기사에 좋아요 제거
+ * DELETE /:id/like
+ */
+router.delete('/:id/like', authenticateJWT, removeLikeFromArticle)
 
 /**
  * 기사 조회 이벤트 저장
