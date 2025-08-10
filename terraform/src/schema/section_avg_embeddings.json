@@ -12,7 +12,6 @@
   {
     "name": "updated_at",
     "type": "TIMESTAMP",
-    "mode": "NULLABLE",
-    "defaultValueExpression": "CURRENT_TIMESTAMP()"
+    "mode": "NULLABLE"
   }
 ]
