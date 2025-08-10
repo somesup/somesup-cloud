@@ -57,3 +57,8 @@ resource "google_project_service" "bigquery" {
   project = var.project
   service = "bigquery.googleapis.com"
 }
+
+resource "google_project_service" "bigquery_data_transfer" {
+  project = var.project
+  service = "bigquerydatatransfer.googleapis.com"
+}
