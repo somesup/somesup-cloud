@@ -40,7 +40,6 @@ resource "google_bigquery_table" "section_avg_embeddings" {
   project             = var.project
   dataset_id          = google_bigquery_dataset.recommendation.dataset_id
   table_id            = "section_avg_embeddings"
-  schema              = file("${path.module}/src/schema/section_avg_embeddings.json")
   deletion_protection = false
 }
 
