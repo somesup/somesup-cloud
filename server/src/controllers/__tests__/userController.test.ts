@@ -249,6 +249,7 @@ describe('updateUserSectionPreferences', () => {
     await updateUserSectionPreferences(req, res)
 
     expect(userService.updateUserSectionPreferences).toHaveBeenCalledWith(1, preferences)
+    expect(userService.requestUpdateUserEmbedding).toHaveBeenCalledWith(1)
     expect(success).toHaveBeenCalledWith(res, updatedPrefs, {
       message: 'User section preferences updated successfully',
     })
