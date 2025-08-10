@@ -7,6 +7,7 @@ import {
 } from '../articleController'
 import { ArticleNotFoundError, articleService } from '../../services/articleService'
 import { successWithCursor, success, errors } from '../../utils/response'
+import { prismaMock } from '../../../prisma/mock'
 
 jest.mock('../../services/articleService')
 jest.mock('../../utils/response')
@@ -191,6 +192,7 @@ describe('articleController', () => {
     it('should add like to article and respond with success', async () => {
       req.userId = 1
       req.params.id = '42'
+      ;(articleService.getArticleById as jest.Mock).mockResolvedValue({ id: 42 })
 
       await addLikeToArticle(req as any, res as any)
 
@@ -203,6 +205,7 @@ describe('articleController', () => {
     it('should return unauthorized if userId is missing', async () => {
       req.userId = null
       req.params.id = '42'
+      ;(articleService.getArticleById as jest.Mock).mockResolvedValue({ id: 42 })
 
       await addLikeToArticle(req as any, res as any)
 
@@ -210,9 +213,23 @@ describe('articleController', () => {
       expect(mockSuccess).not.toHaveBeenCalled()
     })
 
+    it('should return not found if article does not exist', async () => {
+      req.userId = 1
+      req.params.id = '42'
+      ;(articleService.getArticleById as jest.Mock).mockRejectedValue(new ArticleNotFoundError('Article not found'))
+
+      await addLikeToArticle(req as any, res as any)
+
+      expect(mockSuccess).not.toHaveBeenCalled()
+      expect(errors.notFound).toHaveBeenCalledWith(res, 'Article not found')
+      expect(articleService.addLikeToArticle).not.toHaveBeenCalled()
+    })
+
     it('should respond with internal error on service exception', async () => {
       req.userId = 1
       req.params.id = '42'
+      ;(articleService.getArticleById as jest.Mock).mockResolvedValue({ id: 42 })
+
       const error = new Error('Service error')
       ;(articleService.addLikeToArticle as jest.Mock).mockRejectedValue(error)
 
@@ -228,6 +245,7 @@ describe('articleController', () => {
     it('should remove like from article and respond with success', async () => {
       req.userId = 1
       req.params.id = '42'
+      ;(articleService.getArticleById as jest.Mock).mockResolvedValue({ id: 42 })
 
       await removeLikeFromArticle(req as any, res as any)
 
@@ -240,6 +258,7 @@ describe('articleController', () => {
     it('should return unauthorized if userId is missing', async () => {
       req.userId = null
       req.params.id = '42'
+      ;(articleService.getArticleById as jest.Mock).mockResolvedValue({ id: 42 })
 
       await removeLikeFromArticle(req as any, res as any)
 
@@ -247,9 +266,23 @@ describe('articleController', () => {
       expect(mockSuccess).not.toHaveBeenCalled()
     })
 
+    it('should return not found if article does not exist', async () => {
+      req.userId = 1
+      req.params.id = '42'
+      ;(articleService.getArticleById as jest.Mock).mockRejectedValue(new ArticleNotFoundError('Article not found'))
+
+      await removeLikeFromArticle(req as any, res as any)
+
+      expect(mockSuccess).not.toHaveBeenCalled()
+      expect(errors.notFound).toHaveBeenCalledWith(res, 'Article not found')
+      expect(articleService.removeLikeFromArticle).not.toHaveBeenCalled()
+    })
+
     it('should respond with internal error on service exception', async () => {
       req.userId = 1
       req.params.id = '42'
+      ;(articleService.getArticleById as jest.Mock).mockResolvedValue({ id: 42 })
+
       const error = new Error('Service error')
       ;(articleService.removeLikeFromArticle as jest.Mock).mockRejectedValue(error)
 
