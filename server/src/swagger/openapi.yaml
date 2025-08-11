@@ -310,6 +310,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/ArticleCursorPaginationResponse'
 
+        '400':
+          description: 잘못된 요청 (limit 또는 cursor 파라미터 오류)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidLimit:
+                  summary: 잘못된 limit 값
+                  value:
+                    success: false
+                    message: Limit must be between 1 and 100
+
+        '404':
+          description: 기사 없음
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                articlesNotFound:
+                  summary: 기사를 찾을 수 없음
+                  value:
+                    success: false
+                    message: No articles found
+
         '500':
           description: 서버 오류
           content:
