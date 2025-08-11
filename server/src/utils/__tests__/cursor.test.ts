@@ -2,26 +2,23 @@ import { createCursor, decodeCursor } from '../cursor'
 
 describe('createCursor', () => {
   it('should create a base64 encoded cursor from createdAt and id', () => {
-    const createdAt = new Date('2025-07-19T12:00:00Z')
-    const id = 123
+    const idx = 123
 
-    const cursor = createCursor(createdAt, id)
+    const cursor = createCursor(idx)
 
-    const expectedCursor = Buffer.from(JSON.stringify({ createdAt, id })).toString('base64')
+    const expectedCursor = Buffer.from(JSON.stringify({ idx })).toString('base64')
     expect(cursor).toBe(expectedCursor)
   })
 })
 
 describe('decodeCursor', () => {
   it('should decode a base64 encoded cursor to createdAt and id', () => {
-    const createdAt = new Date('2025-07-19T12:00:00Z')
-    const id = 123
-    const cursor = Buffer.from(JSON.stringify({ createdAt, id })).toString('base64')
+    const idx = 123
+    const cursor = Buffer.from(JSON.stringify({ idx })).toString('base64')
 
     const decoded = decodeCursor(cursor)
 
-    expect(decoded.createdAt).toEqual(createdAt)
-    expect(decoded.id).toBe(id)
+    expect(decoded.idx).toBe(idx)
   })
 
   it('should throw an error for invalid base64 strings', () => {

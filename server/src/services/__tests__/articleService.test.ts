@@ -2,11 +2,26 @@ import { ProcessedArticle } from '@prisma/client'
 import { prismaMock } from '../../../prisma/mock'
 import { articleService, ArticleNotFoundError } from '../articleService'
 import { createCursor, decodeCursor } from '../../utils/cursor'
-import dayjs from 'dayjs'
+import { redisClient } from '../../config/redis'
+import { bigqueryClient } from '../../config/bigquery'
+import { beforeEach } from 'node:test'
 
 jest.mock('../../utils/cursor', () => ({
   createCursor: jest.fn(),
   decodeCursor: jest.fn(),
+}))
+
+jest.mock('../../config/redis', () => ({
+  redisClient: {
+    get: jest.fn(),
+    setEx: jest.fn(),
+  },
+}))
+
+jest.mock('../../config/bigquery', () => ({
+  bigqueryClient: {
+    query: jest.fn(),
+  },
 }))
 
 const mockCreateCursor = createCursor as jest.MockedFunction<typeof createCursor>
@@ -14,18 +29,215 @@ const mockDecodeCursor = decodeCursor as jest.MockedFunction<typeof decodeCursor
 
 describe('ArticleService', () => {
   beforeEach(() => {
-    jest.clearAllMocks()
+    jest.restoreAllMocks()
   })
 
-  describe('getArticlesByCursor', () => {
+  describe('setCachedRecommendations', () => {
+    it('Successfully caches recommendations for a user', async () => {
+      const userId = 1
+      const mockCache = {
+        articleIds: [1, 2, 3],
+        lastUpdated: new Date(),
+      }
+
+      await articleService.setCachedRecommendations(userId, mockCache)
+
+      expect(redisClient.setEx).toHaveBeenCalledWith(
+        `recommendations:${userId}`,
+        3600 * 6, // 6시간
+        JSON.stringify(mockCache),
+      )
+    })
+
+    it('Throws error when Redis returns an error', async () => {
+      const userId = 1
+      const mockCache = {
+        articleIds: [1, 2, 3],
+        lastUpdated: new Date(),
+      }
+      const error = new Error('Redis connection failed')
+
+      ;(redisClient.setEx as jest.Mock).mockRejectedValue(error)
+
+      await expect(articleService.setCachedRecommendations(userId, mockCache)).rejects.toThrow(
+        'Redis connection failed',
+      )
+    })
+  })
+
+  describe('calculateSimilarityAndSort', () => {
+    it('Successfully calculates similarity and returns sorted article IDs', async () => {
+      const userId = 1
+      const candidateArticleIds = [101, 102, 103]
+      const mockQueryResult = [{ p_article_id: 102 }, { p_article_id: 103 }, { p_article_id: 101 }]
+
+      ;(bigqueryClient.query as jest.Mock).mockResolvedValue([mockQueryResult])
+
+      const result = await articleService.calculateSimilarityAndSort(userId, candidateArticleIds)
+
+      expect(bigqueryClient.query).toHaveBeenCalledWith({
+        query: expect.stringContaining('WITH user_embedding AS'),
+        params: {
+          userId: userId,
+          articleIds: candidateArticleIds,
+        },
+      })
+      expect(result).toEqual([102, 103, 101])
+    })
+
+    it('Returns empty array when no candidates provided', async () => {
+      const userId = 1
+      const candidateArticleIds: number[] = []
+      const mockQueryResult: any[] = []
+
+      ;(bigqueryClient.query as jest.Mock).mockResolvedValue([mockQueryResult])
+
+      const result = await articleService.calculateSimilarityAndSort(userId, candidateArticleIds)
+
+      expect(result).toEqual([])
+    })
+
+    it('Throws error when BigQuery returns an error', async () => {
+      const userId = 1
+      const candidateArticleIds = [101, 102, 103]
+      const error = new Error('BigQuery connection failed')
+
+      ;(bigqueryClient.query as jest.Mock).mockRejectedValue(error)
+
+      await expect(articleService.calculateSimilarityAndSort(userId, candidateArticleIds)).rejects.toThrow(
+        'BigQuery connection failed',
+      )
+    })
+  })
+
+  describe('getViewedArticleIdsByUser', () => {
+    it('Successfully retrieves viewed article IDs for default period (30 days)', async () => {
+      const userId = 1
+      const mockViewEvents = [
+        { p_article_id: 1 },
+        { p_article_id: 2 },
+        { p_article_id: 3 },
+        { p_article_id: 2 }, // 중복
+      ]
+
+      ;(prismaMock.articleViewEvent.findMany as jest.Mock).mockResolvedValue(mockViewEvents)
+
+      const result = await articleService.getViewedArticleIdsByUser(userId)
+
+      expect(prismaMock.articleViewEvent.findMany).toHaveBeenCalledWith({
+        where: {
+          user_id: userId,
+          event_at: { gte: expect.any(Date) },
+        },
+        select: { p_article_id: true },
+      })
+      expect(result).toEqual(new Set([1, 2, 3, 2]))
+    })
+
+    it('Successfully retrieves viewed article IDs for custom period', async () => {
+      const userId = 1
+      const days = 7
+      const mockViewEvents = [{ p_article_id: 1 }, { p_article_id: 2 }]
+
+      ;(prismaMock.articleViewEvent.findMany as jest.Mock).mockResolvedValue(mockViewEvents)
+
+      const result = await articleService.getViewedArticleIdsByUser(userId, days)
+
+      expect(prismaMock.articleViewEvent.findMany).toHaveBeenCalledWith({
+        where: {
+          user_id: userId,
+          event_at: { gte: expect.any(Date) },
+        },
+        select: { p_article_id: true },
+      })
+      expect(result).toEqual(new Set([1, 2]))
+    })
+
+    it('Returns empty set when no viewed articles exist', async () => {
+      const userId = 1
+
+      ;(prismaMock.articleViewEvent.findMany as jest.Mock).mockResolvedValue([])
+
+      const result = await articleService.getViewedArticleIdsByUser(userId)
+
+      expect(result).toEqual(new Set())
+    })
+
+    it('Throws error when Prisma returns an error', async () => {
+      const userId = 1
+      const error = new Error('Database connection failed')
+
+      ;(prismaMock.articleViewEvent.findMany as jest.Mock).mockRejectedValue(error)
+
+      await expect(articleService.getViewedArticleIdsByUser(userId)).rejects.toThrow('Database connection failed')
+    })
+  })
+
+  describe('regenerateUserCache', () => {
+    it('Successfully regenerates user cache', async () => {
+      const userId = 1
+      const mockViewedArticleIds = new Set([1, 2])
+      const mockCandidateArticles = [{ id: 3 }, { id: 4 }, { id: 5 }]
+      const mockRecommendedIds = [4, 5, 3]
+
+      ;(prismaMock.processedArticle.findMany as jest.Mock).mockResolvedValue(mockCandidateArticles)
+
+      jest.spyOn(articleService, 'getViewedArticleIdsByUser').mockResolvedValue(mockViewedArticleIds)
+      jest.spyOn(articleService, 'calculateSimilarityAndSort').mockResolvedValue(mockRecommendedIds)
+      jest.spyOn(articleService, 'setCachedRecommendations').mockResolvedValue()
+
+      const result = await articleService.regenerateUserCache(userId)
+
+      expect(articleService.getViewedArticleIdsByUser).toHaveBeenCalledWith(userId)
+      expect(prismaMock.processedArticle.findMany).toHaveBeenCalledWith({
+        where: {
+          created_at: { gte: expect.any(Date) },
+          id: { notIn: Array.from(mockViewedArticleIds) },
+        },
+        select: { id: true },
+      })
+      expect(articleService.calculateSimilarityAndSort).toHaveBeenCalledWith(
+        userId,
+        mockCandidateArticles.map((a) => a.id),
+      )
+      expect(articleService.setCachedRecommendations).toHaveBeenCalledWith(userId, {
+        articleIds: mockRecommendedIds,
+        lastUpdated: expect.any(Date),
+      })
+      expect(result).toEqual({
+        articleIds: mockRecommendedIds,
+        lastUpdated: expect.any(Date),
+      })
+    })
+
+    it('Handles case when no candidate articles exist', async () => {
+      const userId = 1
+      const mockViewedArticleIds = new Set([1, 2])
+      const mockCandidateArticles: { id: number }[] = []
+      const mockRecommendedIds: number[] = []
+
+      ;(prismaMock.processedArticle.findMany as jest.Mock).mockResolvedValue(mockCandidateArticles)
+
+      jest.spyOn(articleService, 'getViewedArticleIdsByUser').mockResolvedValue(mockViewedArticleIds)
+      jest.spyOn(articleService, 'calculateSimilarityAndSort').mockResolvedValue(mockRecommendedIds)
+      jest.spyOn(articleService, 'setCachedRecommendations').mockResolvedValue()
+
+      const result = await articleService.regenerateUserCache(userId)
+
+      expect(result.articleIds).toEqual([])
+    })
+  })
+
+  describe('getArticlesByIds', () => {
     const mockArticle1: ProcessedArticle = {
       id: 1,
       title: 'Test Article 1',
       one_line_summary: 'Summary 1',
       full_summary: 'Full summary 1',
+      thumbnail_url: 'http://thumbnail1.com',
       language: 'ko',
       region: 'KR',
-      section: 'tech',
+      section_id: 1,
       created_at: new Date('2025-07-17T00:00:00Z'),
     }
 
@@ -34,194 +246,264 @@ describe('ArticleService', () => {
       title: 'Test Article 2',
       one_line_summary: 'Summary 2',
       full_summary: 'Full summary 2',
-      language: 'en',
-      region: 'US',
-      section: 'business',
+      thumbnail_url: 'http://thumbnail2.com',
+      language: 'ko',
+      region: 'KR',
+      section_id: 2,
+      created_at: new Date('2025-07-18T00:00:00Z'),
+    }
+
+    it('Successfully retrieves multiple articles by IDs', async () => {
+      const articleIds = [1, 2]
+      const mockArticles = [mockArticle1, mockArticle2]
+
+      prismaMock.processedArticle.findMany.mockResolvedValue(mockArticles)
+
+      const result = await articleService.getArticlesByIds(articleIds)
+
+      expect(prismaMock.processedArticle.findMany).toHaveBeenCalledWith({
+        where: {
+          id: { in: articleIds },
+        },
+      })
+      expect(result).toEqual(mockArticles)
+    })
+
+    it('Returns empty array when no matching articles found', async () => {
+      const articleIds = [999, 1000]
+
+      prismaMock.processedArticle.findMany.mockResolvedValue([])
+
+      const result = await articleService.getArticlesByIds(articleIds)
+
+      expect(result).toEqual([])
+    })
+
+    it('Returns partial results when some articles exist', async () => {
+      const articleIds = [1, 999]
+      const mockArticles = [mockArticle1]
+
+      prismaMock.processedArticle.findMany.mockResolvedValue(mockArticles)
+
+      const result = await articleService.getArticlesByIds(articleIds)
+
+      expect(result).toEqual(mockArticles)
+      expect(result).toHaveLength(1)
+    })
+
+    it('Handles empty input array', async () => {
+      const articleIds: number[] = []
+
+      prismaMock.processedArticle.findMany.mockResolvedValue([])
+
+      const result = await articleService.getArticlesByIds(articleIds)
+
+      expect(prismaMock.processedArticle.findMany).toHaveBeenCalledWith({
+        where: {
+          id: { in: [] },
+        },
+      })
+      expect(result).toEqual([])
+    })
+
+    it('Throws error when Prisma returns an error', async () => {
+      const articleIds = [1, 2]
+      const error = new Error('Database connection failed')
+
+      prismaMock.processedArticle.findMany.mockRejectedValue(error)
+
+      await expect(articleService.getArticlesByIds(articleIds)).rejects.toThrow('Database connection failed')
+    })
+  })
+
+  describe('getCachedRecommendations', () => {
+    it('Successfully retrieves cached recommendations for a user', async () => {
+      const userId = 1
+      const mockCache = {
+        articleIds: [1, 2, 3],
+        lastUpdated: new Date(),
+      }
+
+      ;(redisClient.get as jest.Mock).mockResolvedValue(JSON.stringify(mockCache))
+
+      const result = await articleService.getCachedRecommendations(userId)
+
+      expect(redisClient.get).toHaveBeenCalledWith(`recommendations:${userId}`)
+      expect(result).toEqual({
+        articleIds: mockCache.articleIds,
+        lastUpdated: mockCache.lastUpdated.toISOString(),
+      })
+    })
+
+    it('Returns null when no cached recommendations exist', async () => {
+      const userId = 1
+
+      ;(redisClient.get as jest.Mock).mockResolvedValue(null)
+
+      const result = await articleService.getCachedRecommendations(userId)
+
+      expect(redisClient.get).toHaveBeenCalledWith(`recommendations:${userId}`)
+      expect(result).toBeNull()
+    })
+  })
+
+  describe('getRecommendedArticlesByCursor', () => {
+    const mockArticle1: ProcessedArticle = {
+      id: 1,
+      title: 'Test Article 1',
+      one_line_summary: 'Summary 1',
+      full_summary: 'Full summary 1',
+      thumbnail_url: 'http://thumbnail1.com',
+      language: 'ko',
+      region: 'KR',
+      section_id: 1,
+      created_at: new Date('2025-07-17T00:00:00Z'),
+    }
+
+    const mockArticle2: ProcessedArticle = {
+      id: 2,
+      title: 'Test Article 2',
+      one_line_summary: 'Summary 2',
+      full_summary: 'Full summary 2',
+      thumbnail_url: 'http://thumbnail2.com',
+      language: 'ko',
+      region: 'KR',
+      section_id: 2,
       created_at: new Date('2025-07-18T00:00:00Z'),
     }
 
     const mockArticle3: ProcessedArticle = {
       id: 3,
+      title: 'Test Article 3',
+      one_line_summary: 'Summary 3',
       full_summary: 'Full summary 3',
+      thumbnail_url: 'http://thumbnail3.com',
       language: 'ko',
-      region: null,
-      section: null,
+      region: 'KR',
+      section_id: 3,
       created_at: new Date('2025-07-19T00:00:00Z'),
     }
 
-    describe('When cursor is NOT provided', () => {
-      it('Fetches articles from the last 24 hours and there is a next page', async () => {
-        const limit = 2
-        const mockArticles = [mockArticle1, mockArticle2, mockArticle3]
-
-        prismaMock.processedArticle.findMany.mockResolvedValue(mockArticles)
-        mockCreateCursor.mockReturnValue('next-cursor')
-
-        const result = await articleService.getArticlesByCursor(limit)
-
-        expect(prismaMock.processedArticle.findMany).toHaveBeenCalledWith({
-          where: {
-            OR: [
-              { created_at: { gt: expect.any(Date) } },
-              { created_at: expect.any(Date), id: { gt: Number.MIN_SAFE_INTEGER } },
-            ],
-          },
-          orderBy: [{ created_at: 'asc' }, { id: 'asc' }],
-          take: limit + 1,
-        })
-
-        // Check if the date is from 24 hours ago
-        // const calledArgs = prismaMock.processedArticle.findMany.mock.calls[0][0]
-        // const expectedDate = dayjs().subtract(24, 'hour')
-        // const actualDate = dayjs(calledArgs.where.OR[0].created_at.gt)
-        // expect(Math.abs(expectedDate.diff(actualDate, 'minute'))).toBeLessThan(1)
-
-        expect(mockCreateCursor).toHaveBeenCalledWith(mockArticle2.created_at, mockArticle2.id)
-        expect(result).toEqual({
-          data: [mockArticle1, mockArticle2],
-          hasNext: true,
-          nextCursor: 'next-cursor',
-        })
-      })
-
-      it('Fetches from the last 24 hours and there is no next page', async () => {
-        const limit = 3
-        const mockArticles = [mockArticle1, mockArticle2]
-
-        prismaMock.processedArticle.findMany.mockResolvedValue(mockArticles)
-
-        const result = await articleService.getArticlesByCursor(limit)
-
-        expect(result).toEqual({
-          data: [mockArticle1, mockArticle2],
-          hasNext: false,
-          nextCursor: undefined,
-        })
-        expect(mockCreateCursor).not.toHaveBeenCalled()
-      })
-
-      it('Returns empty result set', async () => {
-        const limit = 2
-
-        prismaMock.processedArticle.findMany.mockResolvedValue([])
-
-        const result = await articleService.getArticlesByCursor(limit)
-
-        expect(result).toEqual({
-          data: [],
-          hasNext: false,
-          nextCursor: undefined,
-        })
-        expect(mockCreateCursor).not.toHaveBeenCalled()
-      })
-    })
-
-    describe('When cursor is provided', () => {
-      const mockCursor = 'test-cursor'
-      const decodedCursor = {
-        createdAt: new Date('2024-01-01T12:00:00Z'),
-        id: 5,
+    it('Successfully return articles when cache exists', async () => {
+      const userId = 1
+      const limit = 1
+      const mockUserCache = {
+        articleIds: [mockArticle1.id, mockArticle2.id, mockArticle3.id],
+        lastUpdated: new Date(),
       }
 
-      beforeEach(() => {
-        mockDecodeCursor.mockReturnValue(decodedCursor)
-      })
+      ;(createCursor as jest.Mock).mockReturnValue('next-cursor')
+      jest.spyOn(articleService, 'getCachedRecommendations').mockResolvedValue(mockUserCache)
+      jest.spyOn(articleService, 'getArticlesByIds').mockResolvedValue([mockArticle1])
 
-      it('Decodes the cursor, fetches with the correct condition, and there is a next page', async () => {
-        const limit = 2
-        const mockArticles = [mockArticle1, mockArticle2, mockArticle3]
+      const result = await articleService.getRecommendedArticlesByCursor(userId, limit)
 
-        prismaMock.processedArticle.findMany.mockResolvedValue(mockArticles)
-        mockCreateCursor.mockReturnValue('next-cursor')
-
-        const result = await articleService.getArticlesByCursor(limit, mockCursor)
-
-        expect(mockDecodeCursor).toHaveBeenCalledWith(mockCursor)
-        expect(prismaMock.processedArticle.findMany).toHaveBeenCalledWith({
-          where: {
-            OR: [
-              { created_at: { gt: decodedCursor.createdAt } },
-              { created_at: decodedCursor.createdAt, id: { gt: decodedCursor.id } },
-            ],
-          },
-          orderBy: [{ created_at: 'asc' }, { id: 'asc' }],
-          take: limit + 1,
-        })
-
-        expect(mockCreateCursor).toHaveBeenCalledWith(mockArticle2.created_at, mockArticle2.id)
-        expect(result).toEqual({
-          data: [mockArticle1, mockArticle2],
-          hasNext: true,
-          nextCursor: 'next-cursor',
-        })
-      })
-
-      it('Decodes the cursor, fetches, and there is no next page', async () => {
-        const limit = 3
-        const mockArticles = [mockArticle1, mockArticle2]
-
-        prismaMock.processedArticle.findMany.mockResolvedValue(mockArticles)
-
-        const result = await articleService.getArticlesByCursor(limit, mockCursor)
-
-        expect(mockDecodeCursor).toHaveBeenCalledWith(mockCursor)
-        expect(result).toEqual({
-          data: [mockArticle1, mockArticle2],
-          hasNext: false,
-          nextCursor: undefined,
-        })
-        expect(mockCreateCursor).not.toHaveBeenCalled()
-      })
-
-      it('Returns exactly the limit number of articles and there is no next page', async () => {
-        const limit = 2
-        const mockArticles = [mockArticle1, mockArticle2]
-
-        prismaMock.processedArticle.findMany.mockResolvedValue(mockArticles)
-
-        const result = await articleService.getArticlesByCursor(limit, mockCursor)
-
-        expect(result).toEqual({
-          data: [mockArticle1, mockArticle2],
-          hasNext: false,
-          nextCursor: undefined,
-        })
-        expect(mockCreateCursor).not.toHaveBeenCalled()
+      expect(articleService.getCachedRecommendations).toHaveBeenCalledWith(userId)
+      expect(articleService.getArticlesByIds).toHaveBeenCalledWith(mockUserCache.articleIds.slice(0, limit))
+      expect(result).toEqual({
+        data: [mockArticle1],
+        hasNext: true,
+        nextCursor: 'next-cursor',
       })
     })
 
-    describe('Exception cases', () => {
-      it('Throws error when Prisma returns an error', async () => {
-        const error = new Error('Database connection failed')
-        prismaMock.processedArticle.findMany.mockRejectedValue(error)
+    it('Successfully return articles when cache does not exist', async () => {
+      const userId = 1
+      const limit = 2
+      const mockUserCache = {
+        articleIds: [mockArticle1.id, mockArticle2.id, mockArticle3.id],
+        lastUpdated: new Date(),
+      }
 
-        await expect(articleService.getArticlesByCursor(10)).rejects.toThrow('Database connection failed')
+      ;(createCursor as jest.Mock).mockReturnValue('next-cursor')
+      jest.spyOn(articleService, 'getCachedRecommendations').mockResolvedValue(null)
+      jest.spyOn(articleService, 'regenerateUserCache').mockResolvedValue(mockUserCache)
+      jest.spyOn(articleService, 'getArticlesByIds').mockResolvedValue([mockArticle1, mockArticle2])
+
+      const result = await articleService.getRecommendedArticlesByCursor(userId, limit)
+
+      expect(articleService.getCachedRecommendations).toHaveBeenCalledWith(userId)
+      expect(articleService.regenerateUserCache).toHaveBeenCalledWith(userId)
+      expect(articleService.getArticlesByIds).toHaveBeenCalledWith(mockUserCache.articleIds.slice(0, limit))
+      expect(result).toEqual({
+        data: [mockArticle1, mockArticle2],
+        hasNext: true,
+        nextCursor: 'next-cursor',
       })
+    })
 
-      it('Throws error when cursor decoding fails', async () => {
-        const invalidCursor = 'invalid-cursor'
-        const decodingError = new Error('Invalid cursor format')
+    it('Successfully return articles when cursor is provided', async () => {
+      const userId = 1
+      const limit = 1
+      const mockUserCache = {
+        articleIds: [mockArticle1.id, mockArticle2.id, mockArticle3.id],
+        lastUpdated: new Date(),
+      }
+      const cursor = 'test-cursor'
+      const decodedCursor = { idx: 1 }
 
-        mockDecodeCursor.mockImplementation(() => {
-          throw decodingError
-        })
+      mockDecodeCursor.mockReturnValue(decodedCursor)
+      mockCreateCursor.mockReturnValue(cursor)
 
-        await expect(articleService.getArticlesByCursor(10, invalidCursor)).rejects.toThrow('Invalid cursor format')
+      jest.spyOn(articleService, 'getCachedRecommendations').mockResolvedValue(mockUserCache)
+      jest.spyOn(articleService, 'getArticlesByIds').mockResolvedValue([mockArticle2])
 
-        expect(mockDecodeCursor).toHaveBeenCalledWith(invalidCursor)
-        expect(prismaMock.processedArticle.findMany).not.toHaveBeenCalled()
+      const result = await articleService.getRecommendedArticlesByCursor(userId, limit, cursor)
+
+      expect(articleService.getCachedRecommendations).toHaveBeenCalledWith(userId)
+      expect(mockDecodeCursor).toHaveBeenCalledWith(cursor)
+      expect(articleService.getArticlesByIds).toHaveBeenCalledWith(
+        mockUserCache.articleIds.slice(decodedCursor.idx, decodedCursor.idx + limit),
+      )
+      expect(result).toEqual({
+        data: [mockArticle2],
+        hasNext: true,
+        nextCursor: cursor,
       })
+    })
 
-      it('Throws error when createCursor throws', async () => {
-        const limit = 2
-        const mockArticles = [mockArticle1, mockArticle2, mockArticle3]
+    it('Successfully return articles when cursor is not provided', async () => {
+      const userId = 1
+      const limit = 2
+      const mockUserCache = {
+        articleIds: [mockArticle1.id, mockArticle2.id, mockArticle3.id],
+        lastUpdated: new Date(),
+      }
 
-        prismaMock.processedArticle.findMany.mockResolvedValue(mockArticles)
-        mockCreateCursor.mockImplementation(() => {
-          throw new Error('Cursor creation failed')
-        })
+      ;(createCursor as jest.Mock).mockReturnValue('next-cursor')
+      jest.spyOn(articleService, 'getCachedRecommendations').mockResolvedValue(mockUserCache)
+      jest.spyOn(articleService, 'getArticlesByIds').mockResolvedValue([mockArticle1, mockArticle2])
 
-        await expect(articleService.getArticlesByCursor(limit)).rejects.toThrow('Cursor creation failed')
+      const result = await articleService.getRecommendedArticlesByCursor(userId, limit)
+
+      expect(articleService.getCachedRecommendations).toHaveBeenCalledWith(userId)
+      expect(articleService.getArticlesByIds).toHaveBeenCalledWith(mockUserCache.articleIds.slice(0, limit))
+      expect(result).toEqual({
+        data: [mockArticle1, mockArticle2],
+        hasNext: true,
+        nextCursor: 'next-cursor',
+      })
+    })
+
+    it('Should not generate cursor when no next page exists', async () => {
+      const userId = 1
+      const limit = 3
+      const mockUserCache = {
+        articleIds: [mockArticle1.id, mockArticle2.id],
+        lastUpdated: new Date(),
+      }
+
+      jest.spyOn(articleService, 'getCachedRecommendations').mockResolvedValue(mockUserCache)
+      jest.spyOn(articleService, 'getArticlesByIds').mockResolvedValue([mockArticle1, mockArticle2])
+
+      const result = await articleService.getRecommendedArticlesByCursor(userId, limit)
+
+      expect(articleService.getCachedRecommendations).toHaveBeenCalledWith(userId)
+      expect(articleService.getArticlesByIds).toHaveBeenCalledWith(mockUserCache.articleIds.slice(0, limit))
+      expect(result).toEqual({
+        data: [mockArticle1, mockArticle2],
+        hasNext: false,
+        nextCursor: undefined,
       })
     })
   })

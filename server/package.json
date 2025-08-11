@@ -11,6 +11,7 @@
     "api-docs": "swagger-cli bundle ./src/swagger/openapi.yaml --outfile build/swagger.yaml --type yaml"
   },
   "dependencies": {
+    "@google-cloud/bigquery": "^8.1.1",
     "@types/yamljs": "^0.2.34",
     "axios": "^1.11.0",
     "bcrypt": "^6.0.0",

@@ -1,7 +1,12 @@
 import { ArticleViewEventType, ProcessedArticle } from '@prisma/client'
 import { prisma } from '../../prisma/prisma'
+import { ArticleSimilarityRow, UserArticleCache } from '../types/article'
+import { redisClient } from '../config/redis'
 import { createCursor, decodeCursor } from '../utils/cursor'
 import dayjs from 'dayjs'
+import { bigqueryClient } from '../config/bigquery'
+
+const RECOMMENDATION_CACHE_EXPIRATION = 3600 * 6 // 6시간
 
 /**
  * 커서 페이지네이션을 사용하여 기사를 조회하는 결과 형식입니다.
@@ -25,50 +30,181 @@ export class ArticleNotFoundError extends Error {
 
 export const articleService = {
   /**
-   * Cursor 페이지네이션을 사용하여 기사를 조회합니다.
-   * 이 함수는 주어진 limit와 cursor를 사용하여 기사를 조회하고, 다음 커서를 반환합니다.
-   * 만약 cursor가 주어지지 않으면, 기본적으로 24시간 이전의 기사를 조회합니다.
-   * @param limit - 조회할 기사 수의 제한
-   * @param cursor - 다음 페이지를 위한 커서 (선택적)
-   * @return ArticleCursorPaginationResult - 조회된 기사와 다음 커서 정보
+   * 사용자 ID에 해당하는 추천 기사를 Redis에서 조회합니다.
+   * 이 함수는 캐시된 추천 기사 정보를 반환합니다.
+   * @param userId - 추천 기사를 조회할 사용자의 ID
+   * @return Promise<UserArticleCache | null> - 캐시된 추천 기사 정보 또는 null
    * @example
-   * // 커서 페이지네이션을 사용하여 기사를 조회
-   * getArticlesByCursor(10, 'eyJjcmVhdGVkQXQiOiIyMDIzLTA5LTIxVDEyOjAwOjAwLjAwMFoiLCJpZCI6MX0=')
-   * // 반환값: { data: [...], hasNext: true, nextCursor: 'eyJj...' }
+   * // 사용자 1에 대한 추천 기사를 조회
+   *  getCachedRecommendations(1)
    */
-  getArticlesByCursor: async (limit: number, cursor?: string): Promise<ArticleCursorPaginationResult> => {
-    let createdAt: Date
-    let id: number
+  getCachedRecommendations: async (userId: number): Promise<UserArticleCache | null> => {
+    const cacheKey = `recommendations:${userId}`
+    const cached = await redisClient.get(cacheKey)
 
-    if (cursor) {
-      const decodedCursor = decodeCursor(cursor)
-      createdAt = decodedCursor.createdAt
-      id = decodedCursor.id
-    } else {
-      // cursor가 존재하지 않는 경우 24시간 이전으로 설정
-      createdAt = dayjs().subtract(24, 'hour').toDate()
-      id = Number.MIN_SAFE_INTEGER
+    if (cached) {
+      const data = JSON.parse(cached) as UserArticleCache
+      return data
+    }
+    return null
+  },
+
+  /**
+   * 사용자 ID에 해당하는 추천 기사를 캐싱합니다.
+   * 이 함수는 추천 기사 정보를 Redis에 저장합니다.
+   * @param userId - 추천 기사를 캐싱할 사용자의 ID
+   * @param cache - 캐싱할 추천 기사 정보
+   * @return Promise<void> - 캐싱이 완료되면 반환되는 프로미스
+   * @example
+   * // 사용자 1에 대한 추천 기사를 캐싱
+   *  setCachedRecommendations(1, { articleIds: [101, 102, 103], lastUpdated: new Date() })
+   */
+  setCachedRecommendations: async (userId: number, cache: UserArticleCache): Promise<void> => {
+    const cacheKey = `recommendations:${userId}`
+
+    await redisClient.setEx(cacheKey, RECOMMENDATION_CACHE_EXPIRATION, JSON.stringify(cache))
+  },
+
+  /**
+   * 사용자 임베딩과 후보 기사 임베딩을 비교하여 유사도를 계산하고, 유사도에 따라 기사를 정렬합니다.
+   * 이 함수는 BigQuery에 쿼리를 실행하여 유사도를 계산합니다.
+   * @param userId - 추천을 받을 사용자의 ID
+   * @param candidateArticleIds - 후보 기사 ID 배열
+   * @return Promise<number[]> - 유사도에 따라 정렬된 기사 ID 배열
+   * @example
+   * // 사용자 1에 대한 추천 기사 ID를 계산
+   *  calculateSimilarityAndSort(1, [101, 102, 103])
+   */
+  calculateSimilarityAndSort: async (userId: number, candidateArticleIds: number[]): Promise<number[]> => {
+    const query = `
+      WITH user_embedding AS (
+        SELECT embedding_vector
+        FROM recommendation.user_embeddings
+        WHERE user_id = @userId
+      ),
+      article_similarities AS (
+        SELECT 
+          p.p_article_id,
+          (
+            SELECT 
+              SUM(u.embedding_vector[OFFSET(i)] * p.embedding_vector[OFFSET(i)])
+            FROM UNNEST(GENERATE_ARRAY(0, ARRAY_LENGTH(u.embedding_vector) - 1)) AS i
+          ) / (
+            SQRT((SELECT SUM(POW(x, 2)) FROM UNNEST(u.embedding_vector) AS x)) *
+            SQRT((SELECT SUM(POW(x, 2)) FROM UNNEST(p.embedding_vector) AS x))
+          ) AS cosine_similarity
+        FROM recommendation.p_article_embeddings p
+        CROSS JOIN user_embedding u
+        WHERE p.p_article_id IN UNNEST(@articleIds)
+      )
+      SELECT p_article_id
+      FROM article_similarities
+      ORDER BY cosine_similarity DESC
+    `
+
+    const options = {
+      query: query,
+      params: {
+        userId: userId,
+        articleIds: candidateArticleIds,
+      },
     }
 
-    const articles = await prisma.processedArticle.findMany({
+    const [rows] = await bigqueryClient.query(options)
+    const sortedArticleIds = (rows as ArticleSimilarityRow[]).map((row) => row.p_article_id)
+    return sortedArticleIds
+  },
+
+  /**
+   * 특정 사용자에 대한 추천 기사 정보를 캐싱합니다.
+   * @param userId - 추천 기사를 캐싱할 사용자의 ID
+   * @return Promise<UserArticleCache> - 캐싱된 추천 기사 정보
+   * @example
+   * // 사용자 1에 대한 추천 기사를 캐싱
+   * regenerateUserCache(1)
+   */
+  regenerateUserCache: async (userId: number): Promise<UserArticleCache> => {
+    const viewedArticleIds = await articleService.getViewedArticleIdsByUser(userId)
+
+    const candidateArticles = await prisma.processedArticle.findMany({
       where: {
-        OR: [{ created_at: { gt: createdAt } }, { created_at: createdAt, id: { gt: id } }],
+        created_at: { gte: dayjs().subtract(7, 'day').toDate() },
+        id: { notIn: Array.from(viewedArticleIds) },
       },
-      orderBy: [{ created_at: 'asc' }, { id: 'asc' }],
-      take: limit + 1,
+      select: { id: true },
     })
 
-    const hasNext = articles.length > limit
-    const data = hasNext ? articles.slice(0, -1) : articles
+    const recommendedIds = await articleService.calculateSimilarityAndSort(
+      userId,
+      candidateArticles.map((a) => a.id),
+    )
 
-    let nextCursor: string | undefined
-    if (hasNext && data.length > 0) {
-      const lastArticle = data[data.length - 1]
-      nextCursor = createCursor(lastArticle.created_at, lastArticle.id)
+    const newCache: UserArticleCache = {
+      articleIds: recommendedIds,
+      lastUpdated: new Date(),
     }
 
+    await articleService.setCachedRecommendations(userId, newCache)
+    return newCache
+  },
+
+  /**
+   * 특정 사용자가 최근 n일 동안 조회한 기사 ID를 반환합니다.
+   * @param userId - 조회한 사용자의 ID
+   * @param days - 조회 기간 (기본값: 30일)
+   * @return Set<number> - 조회한 기사 ID의 집합
+   * @example
+   * // 사용자 1이 최근 30일 동안 조회한 기사 ID를 가져옴
+   * getViewedArticleByUserId(1)
+   */
+  getViewedArticleIdsByUser: async (userId: number, days: number = 30): Promise<Set<number>> => {
+    const viewEvents = await prisma.articleViewEvent.findMany({
+      where: {
+        user_id: userId,
+        event_at: { gte: dayjs().subtract(days, 'day').toDate() },
+      },
+      select: { p_article_id: true },
+    })
+
+    return new Set(viewEvents.map((e) => e.p_article_id))
+  },
+
+  /**
+   * 사용자별 추천 기사를 커서 페이지네이션 방식으로 조회합니다.
+   * @param userId - 추천 기사를 조회할 사용자의 ID
+   * @param limit - 한 번에 조회할 기사 수
+   * @param cursor - 다음 페이지를 위한 커서 (기본값: undefined)
+   * @return ArticleCursorPaginationResult - 조회된 기사와 페이지네이션 정보
+   * @example
+   * // 사용자 1의 추천 기사 10개를 조회
+   * getRecommendedArticlesByCursor(1, 10)
+   */
+  getRecommendedArticlesByCursor: async (
+    userId: number,
+    limit: number,
+    cursor?: string,
+  ): Promise<ArticleCursorPaginationResult> => {
+    let cursorIdx = 0
+    if (cursor) {
+      const decodedCursor = decodeCursor(cursor)
+      cursorIdx = decodedCursor.idx
+    }
+
+    let userCache = await articleService.getCachedRecommendations(userId)
+
+    if (!userCache) {
+      userCache = await articleService.regenerateUserCache(userId)
+    }
+
+    const articleIds = userCache.articleIds.slice(cursorIdx, cursorIdx + limit)
+    const articles = await articleService.getArticlesByIds(articleIds)
+
+    const nextIdx = cursorIdx + limit
+    const hasNext = nextIdx < userCache.articleIds.length
+    const nextCursor = hasNext ? createCursor(nextIdx) : undefined
+
     return {
-      data,
+      data: articles,
       hasNext,
       nextCursor,
     }
@@ -95,6 +231,24 @@ export const articleService = {
     }
 
     return article
+  },
+
+  /**
+   * 여러 ID에 해당하는 기사를 조회합니다.
+   * @param ids - 조회할 기사들의 ID 배열
+   * @return ProcessedArticle[] - 조회된 기사 객체 배열
+   * @example
+   * // 여러 ID의 기사를 조회
+   * getArticlesByIds([1, 2, 3])
+   * // 반환값: ProcessedArticle 객체 배열
+   */
+  getArticlesByIds: async (ids: number[]): Promise<ProcessedArticle[]> => {
+    const articles = await prisma.processedArticle.findMany({
+      where: {
+        id: { in: ids },
+      },
+    })
+    return articles
   },
 
   /**

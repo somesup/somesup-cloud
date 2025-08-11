@@ -1,6 +1,6 @@
 import { Request, Response } from 'express'
 import { errors, success, successWithCursor } from '../utils/response'
-import { ArticleCursorPaginationResult, ArticleNotFoundError, articleService } from '../services/articleService'
+import { ArticleNotFoundError, articleService } from '../services/articleService'
 import { AuthenticatedRequest } from '../middlewares/authenticateJWT'
 import { ArticleViewEventType } from '@prisma/client'
 
@@ -26,23 +26,29 @@ import { ArticleViewEventType } from '@prisma/client'
  *  }
  * }
  */
-export const getArticles = async (req: Request, res: Response) => {
-  const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 10
-  const cursor = req.query.cursor as string
-
-  try {
-    const { data, hasNext, nextCursor }: ArticleCursorPaginationResult = await articleService.getArticlesByCursor(
-      limit,
-      cursor,
-    )
-    return successWithCursor(res, data, {
-      hasNext: hasNext,
-      nextCursor: nextCursor,
-    })
-  } catch (error) {
-    console.error('Error fetching articles:', error)
-    return errors.internal(res)
+export const getArticles = async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.userId
+  if (!userId) {
+    return errors.unauthorized(res, 'User ID is required')
   }
+
+  const limit = parseInt(req.query.limit as string, 10) || 10
+  if (limit < 1 || limit > 100) {
+    return errors.badRequest(res, 'Limit must be between 1 and 100')
+  }
+
+  const cursor = req.query.cursor as string | undefined
+
+  const { data, hasNext, nextCursor } = await articleService.getRecommendedArticlesByCursor(userId, limit, cursor)
+  if (!data || data.length === 0) {
+    return errors.notFound(res, 'No articles found')
+  }
+
+  return successWithCursor(res, data, {
+    hasNext,
+    nextCursor,
+    message: 'Articles retrieved successfully',
+  })
 }
 
 /**

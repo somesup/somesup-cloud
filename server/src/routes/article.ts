@@ -16,7 +16,7 @@ const router = Router()
  * 기사 목록 조회 (페이지네이션)
  * GET /
  */
-router.get('/', getArticles)
+router.get('/', authenticateJWT, getArticles)
 
 /**
  * 특정 기사 조회
