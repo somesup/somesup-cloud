@@ -306,7 +306,7 @@ describe('articleController', () => {
 
       expect(articleService.scrapArticle).toHaveBeenCalledWith(1, 42)
       expect(mockSuccess).toHaveBeenCalledWith(res, null, {
-        message: 'Article scrapped successfully',
+        message: 'Article scraped successfully',
       })
     })
 
@@ -343,7 +343,7 @@ describe('articleController', () => {
 
       await scrapArticle(req as any, res as any)
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith('Error scrapping article:', error)
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error scraping article:', error)
       expect(mockInternalError).toHaveBeenCalledWith(res)
       expect(mockSuccess).not.toHaveBeenCalled()
     })
@@ -359,7 +359,7 @@ describe('articleController', () => {
 
       expect(articleService.unscrapArticle).toHaveBeenCalledWith(1, 42)
       expect(mockSuccess).toHaveBeenCalledWith(res, null, {
-        message: 'Article unscrapped successfully',
+        message: 'Article unscraped successfully',
       })
     })
 
@@ -396,7 +396,7 @@ describe('articleController', () => {
 
       await unscrapArticle(req as any, res as any)
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith('Error unscrapping article:', error)
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error unscraping article:', error)
       expect(mockInternalError).toHaveBeenCalledWith(res)
       expect(mockSuccess).not.toHaveBeenCalled()
     })
