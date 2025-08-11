@@ -180,3 +180,67 @@ export const removeLikeFromArticle = async (req: AuthenticatedRequest, res: Resp
     return errors.internal(res)
   }
 }
+
+/**
+ * 특정 기사를 스크랩하는 컨트롤러입니다.
+ * 사용자가 인증된 상태에서 특정 기사를 스크랩할 수 있습니다.
+ * @param {AuthenticatedRequest} req - 인증된 사용자 요청 객체. userId와 body에 articleId가 포함되어야 합니다.
+ * @param {Response} res - Express 응답 객체.
+ * @example
+ * // 요청 예시
+ * POST /api/articles/:id/scrap
+ */
+export const scrapArticle = async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.userId
+  if (!userId) {
+    return errors.unauthorized(res, 'User ID is required')
+  }
+
+  const articleId = parseInt(req.params.id, 10)
+
+  try {
+    const article = await articleService.getArticleById(articleId)
+    await articleService.scrapArticle(userId, article.id)
+    return success(res, null, {
+      message: 'Article scrapped successfully',
+    })
+  } catch (error) {
+    if (error instanceof ArticleNotFoundError) {
+      return errors.notFound(res, 'Article not found')
+    }
+    console.error('Error scrapping article:', error)
+    return errors.internal(res)
+  }
+}
+
+/**
+ * 특정 기사에 대한 사용자의 스크랩을 제거하는 컨트롤러입니다.
+ * 사용자가 인증된 상태에서 특정 기사에 대한 스크랩을 제거할 수 있습니다
+ * @param {AuthenticatedRequest} req - 인증된 사용자 요청 객체. userId와 body에 articleId가 포함되어야 합니다.
+ * @Response} res - Express 응답 객체.
+ * @example
+ * // 요청 예시
+ * DELETE /api/articles/:id/scrap
+ */
+export const unscrapArticle = async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.userId
+  if (!userId) {
+    return errors.unauthorized(res, 'User ID is required')
+  }
+
+  const articleId = parseInt(req.params.id, 10)
+
+  try {
+    const article = await articleService.getArticleById(articleId)
+    await articleService.unscrapArticle(userId, article.id)
+    return success(res, null, {
+      message: 'Article unscrapped successfully',
+    })
+  } catch (error) {
+    if (error instanceof ArticleNotFoundError) {
+      return errors.notFound(res, 'Article not found')
+    }
+    console.error('Error unscrapping article:', error)
+    return errors.internal(res)
+  }
+}

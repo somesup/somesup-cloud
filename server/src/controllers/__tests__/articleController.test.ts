@@ -4,6 +4,8 @@ import {
   storeArticleViewEvent,
   addLikeToArticle,
   removeLikeFromArticle,
+  scrapArticle,
+  unscrapArticle,
 } from '../articleController'
 import { ArticleNotFoundError, articleService } from '../../services/articleService'
 import { successWithCursor, success, errors } from '../../utils/response'
@@ -289,6 +291,112 @@ describe('articleController', () => {
       await removeLikeFromArticle(req as any, res as any)
 
       expect(consoleErrorSpy).toHaveBeenCalledWith('Error removing like from article:', error)
+      expect(mockInternalError).toHaveBeenCalledWith(res)
+      expect(mockSuccess).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('scrapArticle', () => {
+    it('should scrap article and respond with success', async () => {
+      req.userId = 1
+      req.params.id = '42'
+      ;(articleService.getArticleById as jest.Mock).mockResolvedValue({ id: 42 })
+
+      await scrapArticle(req as any, res as any)
+
+      expect(articleService.scrapArticle).toHaveBeenCalledWith(1, 42)
+      expect(mockSuccess).toHaveBeenCalledWith(res, null, {
+        message: 'Article scrapped successfully',
+      })
+    })
+
+    it('should return unauthorized if userId is missing', async () => {
+      req.userId = null
+      req.params.id = '42'
+      ;(articleService.getArticleById as jest.Mock).mockResolvedValue({ id: 42 })
+
+      await scrapArticle(req as any, res as any)
+
+      expect(errors.unauthorized).toHaveBeenCalledWith(res, 'User ID is required')
+      expect(mockSuccess).not.toHaveBeenCalled()
+    })
+
+    it('should return not found if article does not exist', async () => {
+      req.userId = 1
+      req.params.id = '42'
+      ;(articleService.getArticleById as jest.Mock).mockRejectedValue(new ArticleNotFoundError('Article not found'))
+
+      await scrapArticle(req as any, res as any)
+
+      expect(mockSuccess).not.toHaveBeenCalled()
+      expect(errors.notFound).toHaveBeenCalledWith(res, 'Article not found')
+      expect(articleService.scrapArticle).not.toHaveBeenCalled()
+    })
+
+    it('should respond with internal error on service exception', async () => {
+      req.userId = 1
+      req.params.id = '42'
+      ;(articleService.getArticleById as jest.Mock).mockResolvedValue({ id: 42 })
+
+      const error = new Error('Service error')
+      ;(articleService.scrapArticle as jest.Mock).mockRejectedValue(error)
+
+      await scrapArticle(req as any, res as any)
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error scrapping article:', error)
+      expect(mockInternalError).toHaveBeenCalledWith(res)
+      expect(mockSuccess).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('unscrapArticle', () => {
+    it('should unscrap article and respond with success', async () => {
+      req.userId = 1
+      req.params.id = '42'
+      ;(articleService.getArticleById as jest.Mock).mockResolvedValue({ id: 42 })
+
+      await unscrapArticle(req as any, res as any)
+
+      expect(articleService.unscrapArticle).toHaveBeenCalledWith(1, 42)
+      expect(mockSuccess).toHaveBeenCalledWith(res, null, {
+        message: 'Article unscrapped successfully',
+      })
+    })
+
+    it('should return unauthorized if userId is missing', async () => {
+      req.userId = null
+      req.params.id = '42'
+      ;(articleService.getArticleById as jest.Mock).mockResolvedValue({ id: 42 })
+
+      await unscrapArticle(req as any, res as any)
+
+      expect(errors.unauthorized).toHaveBeenCalledWith(res, 'User ID is required')
+      expect(mockSuccess).not.toHaveBeenCalled()
+    })
+
+    it('should return not found if article does not exist', async () => {
+      req.userId = 1
+      req.params.id = '42'
+      ;(articleService.getArticleById as jest.Mock).mockRejectedValue(new ArticleNotFoundError('Article not found'))
+
+      await unscrapArticle(req as any, res as any)
+
+      expect(mockSuccess).not.toHaveBeenCalled()
+      expect(errors.notFound).toHaveBeenCalledWith(res, 'Article not found')
+      expect(articleService.unscrapArticle).not.toHaveBeenCalled()
+    })
+
+    it('should respond with internal error on service exception', async () => {
+      req.userId = 1
+      req.params.id = '42'
+      ;(articleService.getArticleById as jest.Mock).mockResolvedValue({ id: 42 })
+
+      const error = new Error('Service error')
+      ;(articleService.unscrapArticle as jest.Mock).mockRejectedValue(error)
+
+      await unscrapArticle(req as any, res as any)
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error unscrapping article:', error)
       expect(mockInternalError).toHaveBeenCalledWith(res)
       expect(mockSuccess).not.toHaveBeenCalled()
     })

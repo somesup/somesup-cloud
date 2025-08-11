@@ -5,6 +5,8 @@ import {
   storeArticleViewEvent,
   addLikeToArticle,
   removeLikeFromArticle,
+  scrapArticle,
+  unscrapArticle,
 } from '../controllers/articleController'
 import { authenticateJWT } from '../middlewares/authenticateJWT'
 
@@ -33,6 +35,18 @@ router.post('/:id/like', authenticateJWT, addLikeToArticle)
  * DELETE /:id/like
  */
 router.delete('/:id/like', authenticateJWT, removeLikeFromArticle)
+
+/**
+ * 특정 기사 스크랩
+ * POST /:id/scrap
+ */
+router.post('/:id/scrap', authenticateJWT, scrapArticle)
+
+/**
+ * 특정 기사 스크랩 제거
+ * DELETE /:id/scrap
+ */
+router.delete('/:id/scrap', authenticateJWT, unscrapArticle)
 
 /**
  * 기사 조회 이벤트 저장

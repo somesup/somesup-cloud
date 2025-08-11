@@ -153,4 +153,40 @@ export const articleService = {
       },
     })
   },
+
+  /**
+   * 특정 기사에 사용자가 스크랩을 추가합니다.
+   * @param userId - 스크랩을 추가할 사용자의 ID
+   * @param articleId - 스크랩을 추가할 기사의 ID
+   * @return Promise<void> - 스크랩 추가가 완료되면 반환되는 프로미스
+   * @example
+   * // 사용자 1이 기사 2를 스크랩
+   * scrapArticle(1, 2)
+   */
+  scrapArticle: async (userId: number, articleId: number): Promise<void> => {
+    await prisma.scrap.create({
+      data: {
+        user_id: userId,
+        p_article_id: articleId,
+      },
+    })
+  },
+
+  /**
+   * 특정 기사에 대한 사용자의 스크랩을 제거합니다.
+   * @param userId - 스크랩을 제거할 사용자의 ID
+   * @param articleId - 스크랩을 제거할 기사의 ID
+   * @return Promise<void> - 스크랩 제거가 완료되면 반환되는 프로미스
+   * @example
+   * // 사용자 1이 기사 2의 스크랩을 제거
+   * unscrapArticle(1, 2)
+   */
+  unscrapArticle: async (userId: number, articleId: number): Promise<void> => {
+    await prisma.scrap.deleteMany({
+      where: {
+        user_id: userId,
+        p_article_id: articleId,
+      },
+    })
+  },
 }

@@ -376,4 +376,54 @@ describe('ArticleService', () => {
       )
     })
   })
+
+  describe('scrapArticle', () => {
+    it('Successfully scraps an article', async () => {
+      const userId = 1
+      const articleId = 2
+
+      await articleService.scrapArticle(userId, articleId)
+
+      expect(prismaMock.scrap.create).toHaveBeenCalledWith({
+        data: {
+          user_id: userId,
+          p_article_id: articleId,
+        },
+      })
+    })
+
+    it('Throws error when Prisma returns an error', async () => {
+      const userId = 1
+      const articleId = 2
+      const error = new Error('Database connection failed')
+      prismaMock.scrap.create.mockRejectedValue(error)
+
+      await expect(articleService.scrapArticle(userId, articleId)).rejects.toThrow('Database connection failed')
+    })
+  })
+
+  describe('unscrapArticle', () => {
+    it('Successfully removes a scrap from an article', async () => {
+      const userId = 1
+      const articleId = 2
+
+      await articleService.unscrapArticle(userId, articleId)
+
+      expect(prismaMock.scrap.deleteMany).toHaveBeenCalledWith({
+        where: {
+          user_id: userId,
+          p_article_id: articleId,
+        },
+      })
+    })
+
+    it('Throws error when Prisma returns an error', async () => {
+      const userId = 1
+      const articleId = 2
+      const error = new Error('Database connection failed')
+      prismaMock.scrap.deleteMany.mockRejectedValue(error)
+
+      await expect(articleService.unscrapArticle(userId, articleId)).rejects.toThrow('Database connection failed')
+    })
+  })
 })
