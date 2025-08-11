@@ -1,7 +1,7 @@
 import { createCursor, decodeCursor } from '../cursor'
 
 describe('createCursor', () => {
-  it('should create a base64 encoded cursor from createdAt and id', () => {
+  it('should create a base64 encoded cursor from idx', () => {
     const idx = 123
 
     const cursor = createCursor(idx)
@@ -12,7 +12,7 @@ describe('createCursor', () => {
 })
 
 describe('decodeCursor', () => {
-  it('should decode a base64 encoded cursor to createdAt and id', () => {
+  it('should decode a base64 encoded cursor to idx', () => {
     const idx = 123
     const cursor = Buffer.from(JSON.stringify({ idx })).toString('base64')
 

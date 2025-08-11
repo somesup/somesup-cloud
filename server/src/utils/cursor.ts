@@ -7,7 +7,7 @@ export interface CursorData {
 
 /**
  * 커서를 생성하는 함수입니다.
- * 이 함수는 주어진 createdAt 날짜와 id를 사용하여 커서를 생성합니다.
+ * 이 함수는 idx 값을 사용하여 커서를 생성합니다.
  * 커서는 base64로 인코딩된 JSON 문자열로 반환됩니다.
  * @param {number} idx - 커서에 포함될 인덱스 값
  * @return {string} base64로 인코딩된 커서 문자열

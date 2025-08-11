@@ -126,9 +126,10 @@ export const articleService = {
   regenerateUserCache: async (userId: number): Promise<UserArticleCache> => {
     const viewedArticleIds = await articleService.getViewedArticleIdsByUser(userId)
 
+    // 최근 1일 이내에 조회한 기사 중에서 이미 본 기사를 제외한 후보 기사들을 조회합니다.
     const candidateArticles = await prisma.processedArticle.findMany({
       where: {
-        created_at: { gte: dayjs().subtract(7, 'day').toDate() },
+        created_at: { gte: dayjs().subtract(1, 'day').toDate() },
         id: { notIn: Array.from(viewedArticleIds) },
       },
       select: { id: true },
