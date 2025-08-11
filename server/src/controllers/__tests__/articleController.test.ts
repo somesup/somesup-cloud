@@ -136,7 +136,8 @@ describe('articleController', () => {
   describe('storeArticleViewEvent', () => {
     it('should store article view event and respond with success', async () => {
       req.userId = 1
-      req.body = { articleId: 123, eventType: 'VIEW' }
+      req.params.id = '123'
+      req.body = { eventType: 'VIEW' }
 
       await storeArticleViewEvent(req as any, res as any)
 
@@ -148,7 +149,8 @@ describe('articleController', () => {
 
     it('should return unauthorized if userId is missing', async () => {
       req.userId = null
-      req.body = { articleId: 123, eventType: 'VIEW' }
+      req.params.id = '123'
+      req.body = { eventType: 'VIEW' }
 
       await storeArticleViewEvent(req as any, res as any)
 
@@ -156,19 +158,21 @@ describe('articleController', () => {
       expect(mockSuccess).not.toHaveBeenCalled()
     })
 
-    it('should return bad request if articleId or eventType is missing', async () => {
+    it('should return bad request if eventType is missing', async () => {
       req.userId = 1
-      req.body = { articleId: null, eventType: 'VIEW' }
+      req.params.id = '123'
+      req.body = {}
 
       await storeArticleViewEvent(req as any, res as any)
 
-      expect(errors.badRequest).toHaveBeenCalledWith(res, 'articleId and eventType are required')
+      expect(errors.badRequest).toHaveBeenCalledWith(res, 'eventType is required')
       expect(mockSuccess).not.toHaveBeenCalled()
     })
 
     it('should return bad request if eventType is invalid', async () => {
       req.userId = 1
-      req.body = { articleId: 123, eventType: 'INVALID_EVENT' }
+      req.params.id = '123'
+      req.body = { eventType: 'INVALID_EVENT' }
 
       await storeArticleViewEvent(req as any, res as any)
 
@@ -178,7 +182,8 @@ describe('articleController', () => {
 
     it('should respond with internal error on service exception', async () => {
       req.userId = 1
-      req.body = { articleId: 123, eventType: 'VIEW' }
+      req.params.id = '123'
+      req.body = { eventType: 'VIEW' }
       const error = new Error('Service error')
       ;(articleService.storeArticleViewEvent as jest.Mock).mockRejectedValue(error)
 

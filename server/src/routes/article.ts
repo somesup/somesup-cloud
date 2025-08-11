@@ -52,6 +52,6 @@ router.delete('/:id/scrap', authenticateJWT, unscrapArticle)
  * 기사 조회 이벤트 저장
  * POST /view-events
  */
-router.post('/view-events', authenticateJWT, storeArticleViewEvent)
+router.post('/:id/view-events', authenticateJWT, storeArticleViewEvent)
 
 export default router

@@ -97,9 +97,11 @@ export const storeArticleViewEvent = async (req: AuthenticatedRequest, res: Resp
     return errors.unauthorized(res, 'User ID is required')
   }
 
-  const { articleId, eventType } = req.body
-  if (!articleId || !eventType) {
-    return errors.badRequest(res, 'articleId and eventType are required')
+  const articleId = parseInt(req.params.id, 10)
+
+  const { eventType } = req.body
+  if (!eventType) {
+    return errors.badRequest(res, 'eventType is required')
   }
 
   if (!Object.values(ArticleViewEventType).includes(eventType)) {
