@@ -516,7 +516,8 @@ describe('ArticleService', () => {
       full_summary: 'Test full summary',
       language: 'ko',
       region: 'KR',
-      section: 'tech',
+      section_id: 1,
+      thumbnail_url: 'http://example.com/thumbnail.jpg',
       created_at: new Date('2024-01-01T00:00:00Z'),
     }
 
