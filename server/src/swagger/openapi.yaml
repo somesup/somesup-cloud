@@ -922,6 +922,64 @@ paths:
                     success: false
                     message: Internal server error
 
+  /users/mypage-stats:
+    get:
+      summary: 사용자 마이페이지 통계 조회
+      description: 사용자의 마이페이지 통계를 조회합니다. 헤더에 JWT 토큰을 포함해야 합니다.
+      responses:
+        '200':
+          description: 마이페이지 통계 조회 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      user:
+                        $ref: '#/components/schemas/User'
+                      sectionStats:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/SectionStat'
+                      keywordStats:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/KeywordStat'
+                  message:
+                    type: string
+                    example: User stats retrieved successfully
+
+        '401':
+          description: 인증 실패 (토큰이 없거나 유효하지 않음)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                unauthorized:
+                  summary: 인증 실패
+                  value:
+                    success: false
+                    message: User ID is required
+
+        '500':
+          description: 서버 오류
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                serverError:
+                  summary: 서버 오류
+                  value:
+                    success: false
+                    message: Internal server error
+
   /sections:
     get:
       summary: 섹션 목록 조회
@@ -1210,6 +1268,32 @@ components:
           type: string
           format: date-time
           example: '2023-09-21T12:00:00.000Z'
+
+    SectionStat:
+      type: object
+      properties:
+        sectionId:
+          type: integer
+          example: 1
+        sectionName:
+          type: string
+          example: 'politics'
+        preference:
+          type: integer
+          example: 1
+        behaviorScore:
+          type: integer
+          example: 100
+
+    KeywordStat:
+      type: object
+      properties:
+        keyword:
+          type: string
+          example: 'election'
+        count:
+          type: integer
+          example: 50
 
     ArticleCursorPaginationResponse:
       type: object

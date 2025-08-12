@@ -1,6 +1,6 @@
 import { ArticleSection } from '@prisma/client'
 import { prisma } from '../../prisma/prisma'
-import { UserSectionPreference } from '../types/section'
+import { UserSectionPreference, UserSectionStat } from '../types/section'
 
 /**
  * 특정 섹션을 찾지 못했을 때 발생하는 오류 클래스입니다.
@@ -88,6 +88,52 @@ export const sectionService = {
       sectionId: pref.section_id,
       sectionName: pref.section.name,
       preference: pref.preference,
+    }))
+  },
+
+  /**
+   * 사용자의 섹션 통계 정보를 조회합니다.
+   * 각 섹션에 대한 선호도와 행동 점수를 포함합니다.
+   * @param {number} userId - 사용자의 ID
+   * @returns {Promise<UserSectionStat[]>} - 사용자의 섹션 통계 정보 배열
+   */
+  getUserSectionStats: async (userId: number): Promise<UserSectionStat[]> => {
+    const sectionStats = await prisma.articleSection.findMany({
+      include: {
+        user_article_section_preference: {
+          where: { user_id: userId },
+          select: { preference: true },
+        },
+        p_articles: {
+          include: {
+            likes: { where: { user_id: userId } },
+            scraps: { where: { user_id: userId } },
+            ArticleViewEvent: { where: { user_id: userId, event_type: 'DETAIL_VIEW' } },
+          },
+        },
+      },
+    })
+
+    const sectionScores = sectionStats.map((section) => {
+      const likeCount = section.p_articles.reduce((sum, a) => sum + a.likes.length, 0)
+      const scrapCount = section.p_articles.reduce((sum, a) => sum + a.scraps.length, 0)
+      const detailViewCount = section.p_articles.reduce((sum, a) => sum + a.ArticleViewEvent.length, 0)
+
+      const behaviorScore = scrapCount * 5 + likeCount * 3 + detailViewCount * 2
+
+      return {
+        sectionId: section.id,
+        sectionName: section.name,
+        preference: section.user_article_section_preference[0]?.preference || 1, // 기본 선호도는 1
+        behaviorScore: behaviorScore,
+      }
+    })
+
+    return sectionScores.map((score) => ({
+      sectionId: score.sectionId,
+      sectionName: score.sectionName,
+      preference: score.preference,
+      behaviorScore: score.behaviorScore,
     }))
   },
 }
