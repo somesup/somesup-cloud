@@ -89,6 +89,7 @@ class ProcessedArticle:
     language: str
     section_id: int
     thumbnail_url: str
+    keywords: list[str]
     region: Optional[str] = None
 
     @classmethod
@@ -99,6 +100,7 @@ class ProcessedArticle:
                    full_summary=response['full_summary'],
                    language=response['language'],
                    section_id=response['section_id'],
+                   keywords=response['keywords'],
                    region=response.get('region'),
                    thumbnail_url=response['thumbnail_url'])
 
@@ -110,6 +112,7 @@ class AiResponse:
     title: str
     one_line_summary: str
     full_summary: str
+    keywords: list[str]
     section_id: int
 
     @classmethod
@@ -119,6 +122,7 @@ class AiResponse:
             title=response['title'],
             one_line_summary=response['one_line_summary'],
             full_summary=response['full_summary'],
+            keywords=response['keywords'],
             section_id=response['section_id'],
         )
 
@@ -220,6 +224,30 @@ class DatabaseClient:
             logger.error("Error fetching articles: %s", e)
             raise
 
+    def _get_keyword_id(self, connection: pymysql.connections.Connection, keyword: str) -> Optional[int]:
+        """Get the ID of a keyword, or insert it if it doesn't exist."""
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT id FROM keyword WHERE keyword = %s", (keyword,))
+            row = cursor.fetchone()
+            if row:
+                return row['id']
+
+    def _create_keyword(self, connection: pymysql.connections.Connection, keyword: str) -> int:
+        """Insert a new keyword and return its ID."""
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO keyword (keyword) VALUES (%s)", (keyword,))
+            connection.commit()
+            return cursor.lastrowid
+
+    def _get_or_create_keyword_id(self, connection: pymysql.connections.Connection, keyword: str) -> int:
+        """Get the ID of a keyword, or create it if it doesn't exist."""
+        keyword_id = self._get_keyword_id(connection, keyword)
+        if keyword_id is None:
+            keyword_id = self._create_keyword(connection, keyword)
+        return keyword_id
+
     def save_processed_article_with_references(
             self, article: ProcessedArticle,
             articles: list[SimpleArticle]) -> int:
@@ -249,6 +277,14 @@ class DatabaseClient:
                     new_processed_id = cursor.lastrowid
                     logger.info("Processed article saved with ID: %s",
                                 new_processed_id)
+
+                    # Insert keywords and create mapping
+                    keyword_ids = [self._get_or_create_keyword_id(connection, keyword)
+                                   for keyword in article.keywords]
+                    for keyword_id in keyword_ids:
+                        cursor.execute(
+                            "INSERT INTO keyword_article_mapping (p_article_id, keyword_id) VALUES (%s, %s)",
+                            (new_processed_id, keyword_id))
 
                     # Update article references
                     placeholders = ', '.join(['%s'] * len(articles))
@@ -282,36 +318,6 @@ class DatabaseClient:
             # Connection will be automatically rolled back when context exits
             raise
 
-    def update_article_references(self, articles: list[SimpleArticle],
-                                  processed_id: int) -> None:
-        """Update article references to point to the processed article."""
-        if not articles:
-            logger.warning("No articles to update")
-            return
-
-        try:
-            with self._get_connection() as connection:
-                with connection.cursor() as cursor:
-                    placeholders = ', '.join(['%s'] * len(articles))
-                    update_sql = f"""
-                        UPDATE article
-                        SET processed_id = %s
-                        WHERE id IN ({placeholders})
-                    """
-                    cursor.execute(
-                        update_sql,
-                        [processed_id] + [article.id for article in articles],
-                    )
-
-                    updated_count = cursor.rowcount
-                    logger.info("Updated %d article references", updated_count)
-
-                connection.commit()
-
-        except Exception as e:
-            logger.error("Error updating article references: %s", e)
-            raise
-
 
 class VertexAiClient:
     """Client for interacting with Vertex AI for content generation."""
@@ -338,14 +344,15 @@ class VertexAiClient:
             다음 뉴스 기사들을 분석하여 한국어로 통합 요약해주세요.
 
             분석 지침:
+            - 전문성 있고 객관적인 뉴스 스타일로 작성
             - 여러 기사의 핵심 정보를 종합하고 서로 다른 관점을 균형있게 반영
             - 중복 내용은 통합하되 각 기사의 고유한 세부사항은 포함
             - 편향되지 않게 모든 시각을 공정하게 제시
 
             전체 요약 작성 지침:
-            - 뉴스 스타일의 문단 구성으로 작성, 각 문단은 헤더를 가져야 하고, `이모티콘 + 제목` 형식
+            - 뉴스 스타일의 문단 구성으로 작성, 각 문단은 헤더를 가져야 함
             - 개요 문단으로 시작하고, 각 기사의 핵심 주제를 자세하게 설명
-            - 마크다운 기호를 그대로 포함하여 바로 사용 가능하게 작성 (예: # 이모티콘 제목, ## 소제목, - 목록 등)
+            - 마크다운 기호를 그대로 포함하여 바로 사용 가능하게 작성 (예: # 제목, ## 소제목, - 목록 등)
             - 가독성을 위해 너무 많은 Bullet Point는 자제
 
             기사 내용:
@@ -355,8 +362,9 @@ class VertexAiClient:
             {{
               "title": "핵심 주제 제목 (40자 이내)",
               "oneLineSummary": "핵심 내용 한 문장 요약 (60자 이내)",
-              "full_summary": "마크다운 형식 상세 내용 (1000자 이내)",
-              "section": "1: politics, 2: economy, 3: society, 4: culture, 5:tech, 6: world 중 선택하여 integer 반환"
+              "full_summary": "마크다운 형식 상세 내용 (1500자 이내)",
+              "section": "1: politics, 2: economy, 3: society, 4: culture, 5:tech, 6: world 중 선택하여 integer 반환",
+              "keywords": ["키워드1", "키워드2", ...] # 기사 핵심 내용, 주요 인물 혹은 이슈 중심, 최대 3개
             }}
         """
 
@@ -377,10 +385,17 @@ class VertexAiClient:
                 },
                 "section_id": {
                     "type": "integer",
+                },
+                "keywords": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "maxItems": 3,
                 }
             },
             "required":
-            ["title", "one_line_summary", "full_summary", "section_id"],
+            ["title", "one_line_summary", "full_summary", "section_id", "keywords"],
         }
 
     def generate_summary(
@@ -546,6 +561,7 @@ class ArticleSummarizer:
             full_summary=ai_response.full_summary,
             language="ko",  # TODO: Determine language dynamically if needed
             section_id=ai_response.section_id,
+            keywords=ai_response.keywords,
             thumbnail_url=best_thumbnail_url or articles[0].thumbnail_url,
             region=None,  # TODO: Find a good way to determine region
         )
