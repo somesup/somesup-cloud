@@ -8,8 +8,10 @@ datasource db {
 }
 
 model ArticleProvider {
-  id   Int    @id @default(autoincrement())
-  name String
+  id            Int    @id @default(autoincrement())
+  name          String @unique
+  friendly_name String
+  logo_url      String
 
   articles Article[]
 
@@ -26,8 +28,9 @@ enum SectionType {
 }
 
 model ArticleSection {
-  id   Int         @id @default(autoincrement())
-  name SectionType @unique
+  id            Int         @id @default(autoincrement())
+  name          SectionType @unique
+  friendly_name String
 
   p_articles                      ProcessedArticle[]
   user_article_section_preference UserArticleSectionPreference[]
