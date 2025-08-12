@@ -1,13 +1,21 @@
-import { getUserSectionPreferences, updateNickname, updateUser, updateUserSectionPreferences } from '../userController'
+import {
+  getMyPageStats,
+  getUserSectionPreferences,
+  updateNickname,
+  updateUser,
+  updateUserSectionPreferences,
+} from '../userController'
 import { errors, success } from '../../utils/response'
 import { UserNotFoundError, userService } from '../../services/userService'
 import { AuthenticatedRequest } from '../../middlewares/authenticateJWT'
 import { Response } from 'express'
 import { sectionService } from '../../services/sectionService'
+import { keywordService } from '../../services/keywordService'
 
 jest.mock('../../utils/response')
 jest.mock('../../services/userService')
 jest.mock('../../services/sectionService')
+jest.mock('../../services/keywordService')
 
 let consoleErrorSpy: jest.SpyInstance
 
@@ -316,6 +324,65 @@ describe('getUserSectionPreferences', () => {
     await getUserSectionPreferences(req, res)
 
     expect(consoleErrorSpy).toHaveBeenCalledWith('Error retrieving user section preferences:', expect.any(Error))
+    expect(errors.internal).toHaveBeenCalledWith(res)
+  })
+})
+
+describe('getMyPageStats', () => {
+  it('should return unauthorized if userId is missing', async () => {
+    const req = {
+      userId: undefined,
+    } as unknown as AuthenticatedRequest
+
+    const res = mockRes()
+
+    await getMyPageStats(req, res)
+
+    expect(errors.unauthorized).toHaveBeenCalledWith(res, 'User ID is required')
+  })
+
+  it('should return user stats', async () => {
+    const userId = 1
+    const user = { id: userId, nickname: 'testUser' }
+    const sectionStats = [{ sectionId: 1, count: 10 }]
+    const keywordStats = [{ keyword: 'test', count: 5 }]
+
+    const req = {
+      userId,
+    } as AuthenticatedRequest
+
+    ;(userService.findUserById as jest.Mock).mockResolvedValue(user)
+    ;(sectionService.getUserSectionStats as jest.Mock).mockResolvedValue(sectionStats)
+    ;(keywordService.getKeywordstats as jest.Mock).mockResolvedValue(keywordStats)
+
+    const res = mockRes()
+
+    await getMyPageStats(req, res)
+
+    expect(userService.findUserById).toHaveBeenCalledWith(userId)
+    expect(sectionService.getUserSectionStats).toHaveBeenCalledWith(userId)
+    expect(keywordService.getKeywordstats).toHaveBeenCalledWith(userId)
+    expect(success).toHaveBeenCalledWith(
+      res,
+      { user, sectionStats, keywordStats },
+      {
+        message: 'User stats retrieved successfully',
+      },
+    )
+  })
+
+  it('should return internal error on unexpected error', async () => {
+    const req = {
+      userId: 1,
+    } as unknown as AuthenticatedRequest
+
+    const res = mockRes()
+
+    ;(userService.findUserById as jest.Mock).mockRejectedValue(new Error('Unexpected error'))
+
+    await getMyPageStats(req, res)
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Error retrieving user stats:', expect.any(Error))
     expect(errors.internal).toHaveBeenCalledWith(res)
   })
 })

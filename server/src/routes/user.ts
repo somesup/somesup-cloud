@@ -1,6 +1,11 @@
 import { Router } from 'express'
 import { authenticateJWT } from '../middlewares/authenticateJWT'
-import { getUserSectionPreferences, updateUser, updateUserSectionPreferences } from '../controllers/userController'
+import {
+  getMyPageStats,
+  getUserSectionPreferences,
+  updateUser,
+  updateUserSectionPreferences,
+} from '../controllers/userController'
 
 const router = Router()
 
@@ -18,5 +23,10 @@ router.patch('/section-preferences', authenticateJWT, updateUserSectionPreferenc
  * 사용자 섹션 선호도 조회
  */
 router.get('/section-preferences', authenticateJWT, getUserSectionPreferences)
+
+/**
+ * 마이페이지 통계 조회
+ */
+router.get('/mypage-stats', authenticateJWT, getMyPageStats)
 
 export default router
