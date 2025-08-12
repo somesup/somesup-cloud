@@ -8,8 +8,9 @@ datasource db {
 }
 
 model ArticleProvider {
-  id   Int    @id @default(autoincrement())
-  name String
+  id            Int    @id @default(autoincrement())
+  name          String @unique
+  friendly_name String
 
   articles Article[]
 
