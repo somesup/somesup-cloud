@@ -14,6 +14,11 @@ const prisma = new PrismaClient()
  *   세계 (world)
  */
 async function main() {
+  await createSections()
+  await createProviders()
+}
+
+const createSections = async () => {
   const sections = [
     SectionType.politics,
     SectionType.economy,
@@ -28,6 +33,39 @@ async function main() {
       where: { name },
       update: {}, // 이미 있으면 변경하지 않음
       create: { name },
+    })
+  }
+}
+
+const createProviders = async () => {
+  const providers = [
+    { id: 1, name: '오마이뉴스', friendlyName: '오마이뉴스' },
+    { id: 2, name: 'The Guardian', friendlyName: 'The Guardian' },
+    { id: 3, name: '중앙일보', friendlyName: '중앙일보' },
+    { id: 4, name: 'Chosun.com', friendlyName: '조선일보' },
+    { id: 5, name: 'YTN', friendlyName: 'YTN' },
+    { id: 6, name: 'www.donga.com', friendlyName: '동아일보' },
+    { id: 7, name: '국민일보', friendlyName: '국민일보' },
+    { id: 8, name: '경향신문', friendlyName: '경향신문' },
+    { id: 9, name: 'The Wall Street Journal', friendlyName: 'The Wall Street Journal' },
+    { id: 10, name: 'Daily Mail Online', friendlyName: 'Daily Mail' },
+    { id: 11, name: 'BBC', friendlyName: 'BBC' },
+    { id: 12, name: 'Reuters', friendlyName: 'Reuters' },
+    { id: 13, name: 'AP NEWS', friendlyName: 'AP NEWS' },
+    { id: 14, name: '조선일보', friendlyName: '조선일보' },
+    { id: 15, name: 'Breitbart', friendlyName: 'Breitbart' },
+    { id: 16, name: 'Fox News', friendlyName: 'Fox News' },
+  ]
+
+  for (const provider of providers) {
+    await prisma.articleProvider.upsert({
+      where: { id: provider.id },
+      update: {},
+      create: {
+        id: provider.id,
+        name: provider.name,
+        friendly_name: provider.friendlyName,
+      },
     })
   }
 }

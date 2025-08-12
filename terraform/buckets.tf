@@ -20,7 +20,10 @@ resource "google_storage_bucket_iam_member" "public_read" {
 
 resource "null_resource" "upload_provider_logos" {
   provisioner "local-exec" {
-    command = "gsutil -m cp -r assets/provider_logos/* ${google_storage_bucket.provider_logo.url}"
+    command = <<-EOT
+      gsutil -m rm -r ${google_storage_bucket.provider_logo.url}/*
+      gsutil -m cp -r assets/provider_logos/* ${google_storage_bucket.provider_logo.url}
+    EOT
   }
 
   triggers = {
