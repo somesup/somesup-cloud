@@ -7,7 +7,7 @@ export const keywordService = {
    * @param {number} userId - 사용자의 ID
    * @returns {Promise<KeywordCount[]>} - 키워드 통계 배열
    */
-  getKeywordstats: async (userId: number): Promise<KeywordCount[]> => {
+  getUserKeywordStats: async (userId: number): Promise<KeywordCount[]> => {
     const interactedArticles = await prisma.processedArticle.findMany({
       where: {
         OR: [

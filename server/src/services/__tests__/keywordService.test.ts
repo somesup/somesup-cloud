@@ -20,7 +20,7 @@ describe('KeywordService', () => {
 
       ;(prismaMock.processedArticle.findMany as jest.Mock).mockResolvedValue(mockArticles)
 
-      const result = await keywordService.getKeywordstats(mockUserId)
+      const result = await keywordService.getUserKeywordStats(mockUserId)
 
       expect(result).toEqual([
         { keyword: 'test', count: 2 },
@@ -33,7 +33,7 @@ describe('KeywordService', () => {
 
       ;(prismaMock.processedArticle.findMany as jest.Mock).mockResolvedValue([])
 
-      const result = await keywordService.getKeywordstats(mockUserId)
+      const result = await keywordService.getUserKeywordStats(mockUserId)
 
       expect(result).toEqual([])
     })

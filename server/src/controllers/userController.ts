@@ -192,7 +192,7 @@ export const getMyPageStats = async (req: AuthenticatedRequest, res: Response): 
   try {
     const user = await userService.findUserById(userId)
     const sectionStats = await sectionService.getUserSectionStats(userId)
-    const keywordStats = await keywordService.getKeywordstats(userId)
+    const keywordStats = await keywordService.getUserKeywordStats(userId)
 
     return success(
       res,

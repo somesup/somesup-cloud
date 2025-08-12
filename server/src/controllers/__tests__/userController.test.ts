@@ -353,7 +353,7 @@ describe('getMyPageStats', () => {
 
     ;(userService.findUserById as jest.Mock).mockResolvedValue(user)
     ;(sectionService.getUserSectionStats as jest.Mock).mockResolvedValue(sectionStats)
-    ;(keywordService.getKeywordstats as jest.Mock).mockResolvedValue(keywordStats)
+    ;(keywordService.getUserKeywordStats as jest.Mock).mockResolvedValue(keywordStats)
 
     const res = mockRes()
 
@@ -361,7 +361,7 @@ describe('getMyPageStats', () => {
 
     expect(userService.findUserById).toHaveBeenCalledWith(userId)
     expect(sectionService.getUserSectionStats).toHaveBeenCalledWith(userId)
-    expect(keywordService.getKeywordstats).toHaveBeenCalledWith(userId)
+    expect(keywordService.getUserKeywordStats).toHaveBeenCalledWith(userId)
     expect(success).toHaveBeenCalledWith(
       res,
       { user, sectionStats, keywordStats },
