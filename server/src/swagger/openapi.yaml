@@ -1441,7 +1441,7 @@ components:
           type: boolean
           example: true
         data:
-          $ref: '#/components/schemas/Article'
+          $ref: '#/components/schemas/DetailedProcessedArticle'
         message:
           type: string
           example: Article retrieved successfully
