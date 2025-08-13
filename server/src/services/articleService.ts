@@ -1,6 +1,6 @@
 import { ArticleViewEventType, ProcessedArticle } from '@prisma/client'
 import { prisma } from '../../prisma/prisma'
-import { ArticleSimilarityRow, UserArticleCache } from '../types/article'
+import { ArticleSimilarityRow, DetailedProcessedArticle, UserArticleCache } from '../types/article'
 import { redisClient } from '../config/redis'
 import { createCursor, decodeCursor } from '../utils/cursor'
 import dayjs from 'dayjs'
@@ -12,7 +12,7 @@ const RECOMMENDATION_CACHE_EXPIRATION = 3600 * 6 // 6시간
  * 커서 페이지네이션을 사용하여 기사를 조회하는 결과 형식입니다.
  */
 export interface ArticleCursorPaginationResult {
-  data: ProcessedArticle[]
+  data: DetailedProcessedArticle[]
   hasNext: boolean
   nextCursor?: string
 }
@@ -83,10 +83,10 @@ export const articleService = {
         WHERE user_id = @userId
       ),
       article_similarities AS (
-        SELECT 
+        SELECT
           p.p_article_id,
           (
-            SELECT 
+            SELECT
               SUM(u.embedding_vector[OFFSET(i)] * p.embedding_vector[OFFSET(i)])
             FROM UNNEST(GENERATE_ARRAY(0, ARRAY_LENGTH(u.embedding_vector) - 1)) AS i
           ) / (
@@ -198,7 +198,7 @@ export const articleService = {
     }
 
     const articleIds = userCache.articleIds.slice(cursorIdx, cursorIdx + limit)
-    const articles = await articleService.getArticlesByIds(articleIds)
+    const articles = await articleService.getDetailedArticlesByIds(articleIds, userId)
 
     const nextIdx = cursorIdx + limit
     const hasNext = nextIdx < userCache.articleIds.length
@@ -235,21 +235,114 @@ export const articleService = {
   },
 
   /**
-   * 여러 ID에 해당하는 기사를 조회합니다.
-   * @param ids - 조회할 기사들의 ID 배열
-   * @return ProcessedArticle[] - 조회된 기사 객체 배열
+   * 특정 ID의 기사들을 상세하게 조회합니다.
+   * 이 함수는 기사 ID 배열을 받아 해당 기사들의 상세 정보를 반환합니다.
+   * @param ids - 조회할 기사 ID 배열
+   * @param userId - 사용자의 ID (좋아요/스크랩 여부 확인용)
+   * @return Promise<DetailedProcessedArticle[]> - 상세 기사 정보 배열
    * @example
-   * // 여러 ID의 기사를 조회
-   * getArticlesByIds([1, 2, 3])
-   * // 반환값: ProcessedArticle 객체 배열
+   * // 특정 ID의 기사들을 상세하게 조회
+   * getDetailedArticlesByIds([1, 2, 3], 1)
    */
-  getArticlesByIds: async (ids: number[]): Promise<ProcessedArticle[]> => {
+  getDetailedArticlesByIds: async (ids: number[], userId: number) => {
     const articles = await prisma.processedArticle.findMany({
-      where: {
-        id: { in: ids },
+      where: { id: { in: ids } },
+      include: {
+        section: {
+          // Section 정보
+          select: {
+            id: true,
+            name: true,
+            friendly_name: true,
+          },
+        },
+        articles: {
+          // providers 정보 (원문 기사)
+          select: {
+            provider: {
+              select: {
+                id: true,
+                name: true,
+                friendly_name: true,
+                logo_url: true,
+              },
+            },
+            news_url: true,
+          },
+        },
+        keywords: {
+          // Keywords
+          select: {
+            keyword: {
+              select: {
+                id: true,
+                keyword: true,
+              },
+            },
+          },
+        },
+        likes: {
+          // 내가 좋아요 했는지 확인
+          where: { user_id: userId },
+          select: { user_id: true },
+        },
+        scraps: {
+          // 내가 스크랩 했는지 확인
+          where: { user_id: userId },
+          select: { user_id: true },
+        },
+        _count: {
+          // 좋아요/스크랩 수
+          select: {
+            likes: true,
+            scraps: true,
+          },
+        },
       },
     })
-    return articles
+
+    return articles.map((a) => ({
+      id: a.id,
+      section: {
+        id: a.section.id,
+        name: a.section.name,
+        friendlyName: a.section.friendly_name,
+      },
+      providers: a.articles.map((art) => ({
+        id: art.provider.id,
+        name: art.provider.name,
+        friendlyName: art.provider.friendly_name,
+        newsUrl: art.news_url,
+        logoUrl: art.provider.logo_url,
+      })),
+      keywords: a.keywords.map((k) => ({
+        id: k.keyword.id,
+        keyword: k.keyword.keyword,
+      })),
+      title: a.title,
+      oneLineSummary: a.one_line_summary,
+      fullSummary: a.full_summary,
+      language: a.language,
+      region: a.region ?? undefined,
+      thumbnailUrl: a.thumbnail_url,
+      createdAt: a.created_at,
+      like: {
+        isLiked: a.likes.length > 0,
+        count: a._count.likes,
+      },
+      scrap: {
+        isScraped: a.scraps.length > 0,
+        count: a._count.scraps,
+      },
+    }))
+  },
+
+  getDetailedArticleById: async (id: number, userId: number): Promise<DetailedProcessedArticle> => {
+    const article = await articleService.getDetailedArticlesByIds([id], userId)
+    if (article.length === 0) {
+      throw new ArticleNotFoundError(`Article with ID ${id} not found`)
+    }
+    return article[0]
   },
 
   /**

@@ -67,11 +67,16 @@ export const getArticles = async (req: AuthenticatedRequest, res: Response) => {
  *   }
  * }
  */
-export const getArticleById = async (req: Request, res: Response) => {
-  const id = parseInt(req.params.id, 10)
+export const getArticleById = async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.userId
+  if (!userId) {
+    return errors.unauthorized(res, 'User ID is required')
+  }
+
+  const articleId = parseInt(req.params.id, 10)
 
   try {
-    const article = await articleService.getArticleById(id)
+    const article = await articleService.getDetailedArticleById(articleId, userId)
     return success(res, article, {
       message: 'Article retrieved successfully',
     })
