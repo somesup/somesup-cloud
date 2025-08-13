@@ -36,31 +36,9 @@ describe('articleController', () => {
   })
 
   describe('getArticles', () => {
-    it('should call service and respond with successWithCursor on success', async () => {
-      req.userId = 1
-      req.query.limit = '20'
-      req.query.cursor = 'abc'
-      const mockResult = {
-        data: [{ id: 1, title: 'Test Article' }],
-        hasNext: true,
-        nextCursor: 'def',
-      }
-
-      ;(articleService.getRecommendedArticlesByCursor as jest.Mock).mockResolvedValue(mockResult)
-
-      await getArticles(req, res)
-
-      expect(articleService.getRecommendedArticlesByCursor).toHaveBeenCalledWith(1, 20, 'abc')
-      expect(mockSuccessWithCursor).toHaveBeenCalledWith(res, mockResult.data, {
-        hasNext: mockResult.hasNext,
-        nextCursor: mockResult.nextCursor,
-        message: 'Articles retrieved successfully',
-      })
-    })
-
     it('should return unauthorized if userId is missing', async () => {
-      req.query.limit = '20'
-      req.query.cursor = 'abc'
+      req.userId = null
+      req.query = { limit: '10' }
 
       await getArticles(req, res)
 
@@ -68,50 +46,125 @@ describe('articleController', () => {
       expect(mockSuccessWithCursor).not.toHaveBeenCalled()
     })
 
-    it('should use default limit if not provided', async () => {
+    it('should return bad request if limit is not a number', async () => {
       req.userId = 1
-      req.query.cursor = 'abc'
-      const mockResult = {
-        data: [{ id: 1, title: 'Test Article' }],
-        hasNext: true,
-        nextCursor: 'def',
-      }
-
-      ;(articleService.getRecommendedArticlesByCursor as jest.Mock).mockResolvedValue(mockResult)
+      req.query = { limit: 'invalid' }
 
       await getArticles(req, res)
 
-      expect(articleService.getRecommendedArticlesByCursor).toHaveBeenCalledWith(1, 10, 'abc')
-      expect(mockSuccessWithCursor).toHaveBeenCalledWith(res, mockResult.data, {
-        hasNext: mockResult.hasNext,
-        nextCursor: mockResult.nextCursor,
-        message: 'Articles retrieved successfully',
+      expect(errors.badRequest).toHaveBeenCalledWith(res, 'Invalid limit. It must be a number between 1 and 100.')
+      expect(mockSuccessWithCursor).not.toHaveBeenCalled()
+    })
+
+    it('should return bad request if limit is not provided', async () => {
+      req.userId = 1
+      req.query = {}
+
+      await getArticles(req, res)
+
+      expect(errors.badRequest).toHaveBeenCalledWith(res, 'Invalid limit. It must be a number between 1 and 100.')
+      expect(mockSuccessWithCursor).not.toHaveBeenCalled()
+    })
+
+    it('should return bad request if limit is out of range', async () => {
+      req.userId = 1
+      req.query = { limit: '0' }
+
+      await getArticles(req, res)
+
+      expect(errors.badRequest).toHaveBeenCalledWith(res, 'Invalid limit. It must be a number between 1 and 100.')
+      expect(mockSuccessWithCursor).not.toHaveBeenCalled()
+    })
+
+    it('should return scraped articles successfully', async () => {
+      req.userId = 1
+      req.query = { limit: '10', scraped: 'true' }
+
+      const mockScrapedArticlesByCursor = {
+        data: [{ id: 1, title: 'Scraped Article 1' }],
+        hasNext: false,
+        nextCursor: null,
+      }
+
+      ;(articleService.getScrapedArticlesByCursor as jest.Mock).mockResolvedValue(mockScrapedArticlesByCursor)
+
+      await getArticles(req, res)
+
+      expect(articleService.getScrapedArticlesByCursor).toHaveBeenCalledWith(1, 10, undefined)
+      expect(mockSuccessWithCursor).toHaveBeenCalledWith(res, mockScrapedArticlesByCursor.data, {
+        hasNext: mockScrapedArticlesByCursor.hasNext,
+        nextCursor: mockScrapedArticlesByCursor.nextCursor,
+        message: 'Articles retreived successfully',
       })
     })
 
-    it('should return bad request if limit is invalid', async () => {
+    it('should return liked articles successfully', async () => {
       req.userId = 1
-      req.query.limit = '10000'
+      req.query = { limit: '10', liked: 'true' }
+
+      const mockLikedArticlesByCursor = {
+        data: [{ id: 1, title: 'Liked Article 1' }],
+        hasNext: false,
+        nextCursor: null,
+      }
+
+      ;(articleService.getLikedArticlesByCursor as jest.Mock).mockResolvedValue(mockLikedArticlesByCursor)
 
       await getArticles(req, res)
 
-      expect(errors.badRequest).toHaveBeenCalledWith(res, 'Limit must be between 1 and 100')
-      expect(mockSuccessWithCursor).not.toHaveBeenCalled()
+      expect(articleService.getLikedArticlesByCursor).toHaveBeenCalledWith(1, 10, undefined)
+      expect(mockSuccessWithCursor).toHaveBeenCalledWith(res, mockLikedArticlesByCursor.data, {
+        hasNext: mockLikedArticlesByCursor.hasNext,
+        nextCursor: mockLikedArticlesByCursor.nextCursor,
+        message: 'Articles retreived successfully',
+      })
+    })
+
+    it('should return recommended articles sucessfully', async () => {
+      req.userId = 1
+      req.query = { limit: '10' }
+
+      const mockRecommendedArticlesByCursor = {
+        data: [{ id: 1, title: 'Article 1' }],
+        hasNext: false,
+        nextCursor: null,
+      }
+
+      ;(articleService.getRecommendedArticlesByCursor as jest.Mock).mockResolvedValue(mockRecommendedArticlesByCursor)
+
+      await getArticles(req, res)
+
+      expect(articleService.getRecommendedArticlesByCursor).toHaveBeenCalledWith(1, 10, undefined)
+      expect(mockSuccessWithCursor).toHaveBeenCalledWith(res, mockRecommendedArticlesByCursor.data, {
+        hasNext: mockRecommendedArticlesByCursor.hasNext,
+        nextCursor: mockRecommendedArticlesByCursor.nextCursor,
+        message: 'Articles retreived successfully',
+      })
     })
 
     it('should return not found if no articles are found', async () => {
       req.userId = 1
-      req.query.limit = '20'
-      req.query.cursor = 'abc'
-      ;(articleService.getRecommendedArticlesByCursor as jest.Mock).mockResolvedValue({
-        data: [],
-        hasNext: false,
-        nextCursor: null,
-      })
+      req.query = { limit: '10' }
+      ;(articleService.getRecommendedArticlesByCursor as jest.Mock).mockRejectedValue(
+        new ArticleNotFoundError('No articles found'),
+      )
 
       await getArticles(req, res)
 
+      expect(mockSuccessWithCursor).not.toHaveBeenCalled()
       expect(errors.notFound).toHaveBeenCalledWith(res, 'No articles found')
+    })
+
+    it('should return internal error on service exception', async () => {
+      req.userId = 1
+      req.query = { limit: '10' }
+      const error = new Error('Service error')
+      ;(articleService.getRecommendedArticlesByCursor as jest.Mock).mockRejectedValue(error)
+
+      await getArticles(req, res)
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error retrieving articles:', error)
+      expect(mockInternalError).toHaveBeenCalledWith(res)
       expect(mockSuccessWithCursor).not.toHaveBeenCalled()
     })
   })
