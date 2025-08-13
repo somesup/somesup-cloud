@@ -1,10 +1,11 @@
-import { ProcessedArticle } from '@prisma/client'
+import { ProcessedArticle, SectionType } from '@prisma/client'
 import { prismaMock } from '../../../prisma/mock'
 import { articleService, ArticleNotFoundError } from '../articleService'
 import { createCursor, decodeCursor } from '../../utils/cursor'
 import { redisClient } from '../../config/redis'
 import { bigqueryClient } from '../../config/bigquery'
 import { beforeEach } from 'node:test'
+import { DetailedProcessedArticle } from '../../types/article'
 
 jest.mock('../../utils/cursor', () => ({
   createCursor: jest.fn(),
@@ -27,8 +28,89 @@ jest.mock('../../config/bigquery', () => ({
 const mockCreateCursor = createCursor as jest.MockedFunction<typeof createCursor>
 const mockDecodeCursor = decodeCursor as jest.MockedFunction<typeof decodeCursor>
 
+const mockRawDetailedArticle = {
+  id: 1,
+  section: {
+    id: 1,
+    name: SectionType.politics,
+    friendly_name: '정치',
+  },
+  articles: [
+    {
+      provider: {
+        id: 101,
+        name: 'Provider 1',
+        friendly_name: '뉴스사 1',
+        logo_url: 'https://example.com/logos/1.png',
+      },
+      news_url: 'https://news1.com/article/1',
+    },
+    {
+      provider: {
+        id: 102,
+        name: 'Provider 2',
+        friendly_name: '뉴스사 2',
+        logo_url: 'https://example.com/logos/2.png',
+      },
+      news_url: 'https://news2.com/article/1',
+    },
+  ],
+  keywords: [
+    {
+      keyword: {
+        id: 201,
+        keyword: '키워드 1',
+      },
+    },
+    {
+      keyword: {
+        id: 202,
+        keyword: '키워드 2',
+      },
+    },
+  ],
+  likes: [{ user_id: 1 }],
+  scraps: [],
+  _count: {
+    likes: 12,
+    scraps: 3,
+  },
+  title: 'Test Summary',
+  one_line_summary: 'Test Summary',
+  full_summary: 'Test Full Summary',
+  language: 'ko',
+  region: 'KR',
+  thumbnail_url: 'https://example.com/thumbnails/article1.jpg',
+  created_at: new Date('2025-08-12T09:00:00Z'),
+}
+
+const mockDetailedArticle: DetailedProcessedArticle = {
+  id: 1,
+  section: { id: 1, name: SectionType.politics, friendlyName: '정치' },
+  providers: [
+    {
+      id: 1,
+      name: 'Test Provider',
+      friendlyName: '테스트 뉴스사',
+      newsUrl: 'http://news1.com',
+      logoUrl: 'http://logo1.com',
+    },
+  ],
+  keywords: [{ id: 1, keyword: 'test' }],
+  title: 'Test Article 1',
+  oneLineSummary: 'Summary 1',
+  fullSummary: 'Full summary 1',
+  language: 'ko',
+  region: 'KR',
+  thumbnailUrl: 'http://thumbnail1.com',
+  createdAt: new Date('2025-07-17T00:00:00Z'),
+  like: { isLiked: false, count: 0 },
+  scrap: { isScraped: false, count: 0 },
+}
+
 describe('ArticleService', () => {
   beforeEach(() => {
+    jest.clearAllMocks()
     jest.restoreAllMocks()
   })
 
@@ -228,94 +310,6 @@ describe('ArticleService', () => {
     })
   })
 
-  describe('getArticlesByIds', () => {
-    const mockArticle1: ProcessedArticle = {
-      id: 1,
-      title: 'Test Article 1',
-      one_line_summary: 'Summary 1',
-      full_summary: 'Full summary 1',
-      thumbnail_url: 'http://thumbnail1.com',
-      language: 'ko',
-      region: 'KR',
-      section_id: 1,
-      created_at: new Date('2025-07-17T00:00:00Z'),
-    }
-
-    const mockArticle2: ProcessedArticle = {
-      id: 2,
-      title: 'Test Article 2',
-      one_line_summary: 'Summary 2',
-      full_summary: 'Full summary 2',
-      thumbnail_url: 'http://thumbnail2.com',
-      language: 'ko',
-      region: 'KR',
-      section_id: 2,
-      created_at: new Date('2025-07-18T00:00:00Z'),
-    }
-
-    it('Successfully retrieves multiple articles by IDs', async () => {
-      const articleIds = [1, 2]
-      const mockArticles = [mockArticle1, mockArticle2]
-
-      prismaMock.processedArticle.findMany.mockResolvedValue(mockArticles)
-
-      const result = await articleService.getArticlesByIds(articleIds)
-
-      expect(prismaMock.processedArticle.findMany).toHaveBeenCalledWith({
-        where: {
-          id: { in: articleIds },
-        },
-      })
-      expect(result).toEqual(mockArticles)
-    })
-
-    it('Returns empty array when no matching articles found', async () => {
-      const articleIds = [999, 1000]
-
-      prismaMock.processedArticle.findMany.mockResolvedValue([])
-
-      const result = await articleService.getArticlesByIds(articleIds)
-
-      expect(result).toEqual([])
-    })
-
-    it('Returns partial results when some articles exist', async () => {
-      const articleIds = [1, 999]
-      const mockArticles = [mockArticle1]
-
-      prismaMock.processedArticle.findMany.mockResolvedValue(mockArticles)
-
-      const result = await articleService.getArticlesByIds(articleIds)
-
-      expect(result).toEqual(mockArticles)
-      expect(result).toHaveLength(1)
-    })
-
-    it('Handles empty input array', async () => {
-      const articleIds: number[] = []
-
-      prismaMock.processedArticle.findMany.mockResolvedValue([])
-
-      const result = await articleService.getArticlesByIds(articleIds)
-
-      expect(prismaMock.processedArticle.findMany).toHaveBeenCalledWith({
-        where: {
-          id: { in: [] },
-        },
-      })
-      expect(result).toEqual([])
-    })
-
-    it('Throws error when Prisma returns an error', async () => {
-      const articleIds = [1, 2]
-      const error = new Error('Database connection failed')
-
-      prismaMock.processedArticle.findMany.mockRejectedValue(error)
-
-      await expect(articleService.getArticlesByIds(articleIds)).rejects.toThrow('Database connection failed')
-    })
-  })
-
   describe('getCachedRecommendations', () => {
     it('Successfully retrieves cached recommendations for a user', async () => {
       const userId = 1
@@ -347,61 +341,127 @@ describe('ArticleService', () => {
     })
   })
 
+  describe('getDetailedArticlesByIds', () => {
+    it('Should correctly map raw Prisma result to DetailedProcessedArticle', async () => {
+      const userId = 1
+      const articleIds = [1]
+
+      ;(prismaMock.processedArticle.findMany as jest.Mock).mockResolvedValue([mockRawDetailedArticle])
+
+      const result = await articleService.getDetailedArticlesByIds(articleIds, userId)
+
+      expect(result).toEqual([
+        {
+          id: mockRawDetailedArticle.id,
+          section: {
+            id: mockRawDetailedArticle.section.id,
+            name: mockRawDetailedArticle.section.name,
+            friendlyName: mockRawDetailedArticle.section.friendly_name,
+          },
+          providers: mockRawDetailedArticle.articles.map((a) => ({
+            id: a.provider.id,
+            name: a.provider.name,
+            friendlyName: a.provider.friendly_name,
+            newsUrl: a.news_url,
+            logoUrl: a.provider.logo_url,
+          })),
+          keywords: mockRawDetailedArticle.keywords.map((k) => ({
+            id: k.keyword.id,
+            keyword: k.keyword.keyword,
+          })),
+          title: mockRawDetailedArticle.title,
+          oneLineSummary: mockRawDetailedArticle.one_line_summary,
+          fullSummary: mockRawDetailedArticle.full_summary,
+          language: mockRawDetailedArticle.language,
+          region: mockRawDetailedArticle.region,
+          thumbnailUrl: mockRawDetailedArticle.thumbnail_url,
+          createdAt: mockRawDetailedArticle.created_at,
+          like: {
+            isLiked: mockRawDetailedArticle.likes.length > 0,
+            count: mockRawDetailedArticle._count.likes,
+          },
+          scrap: {
+            isScraped: mockRawDetailedArticle.scraps.length > 0,
+            count: mockRawDetailedArticle._count.scraps,
+          },
+        },
+      ])
+    })
+
+    it('Should handle undefined region', async () => {
+      const userId = 1
+      const articleIds = [1]
+
+      const rawArticleWithUndefinedRegion = {
+        ...mockRawDetailedArticle,
+        region: undefined,
+      }
+
+      ;(prismaMock.processedArticle.findMany as jest.Mock).mockResolvedValue([rawArticleWithUndefinedRegion])
+
+      const result = await articleService.getDetailedArticlesByIds(articleIds, userId)
+
+      expect(result[0].region).toBe(undefined)
+    })
+  })
+
+  describe('getDetailedArticleById', () => {
+    it('returns first detailed article', async () => {
+      const userId = 1
+      const articleId = 1
+      jest.spyOn(articleService, 'getDetailedArticlesByIds').mockResolvedValue([mockDetailedArticle])
+      const result = await articleService.getDetailedArticleById(articleId, userId)
+      expect(result).toEqual(mockDetailedArticle)
+    })
+
+    it('throws when empty array', async () => {
+      const userId = 1
+      const articleId = 1
+      jest.spyOn(articleService, 'getDetailedArticlesByIds').mockResolvedValue([])
+      await expect(articleService.getDetailedArticleById(articleId, userId)).rejects.toThrow(ArticleNotFoundError)
+    })
+  })
+
   describe('getRecommendedArticlesByCursor', () => {
-    const mockArticle1: ProcessedArticle = {
+    const mockDetailedArticle1 = {
+      ...mockDetailedArticle,
       id: 1,
       title: 'Test Article 1',
-      one_line_summary: 'Summary 1',
-      full_summary: 'Full summary 1',
-      thumbnail_url: 'http://thumbnail1.com',
-      language: 'ko',
-      region: 'KR',
-      section_id: 1,
-      created_at: new Date('2025-07-17T00:00:00Z'),
     }
 
-    const mockArticle2: ProcessedArticle = {
+    const mockDetailedArticle2 = {
+      ...mockDetailedArticle,
       id: 2,
       title: 'Test Article 2',
-      one_line_summary: 'Summary 2',
-      full_summary: 'Full summary 2',
-      thumbnail_url: 'http://thumbnail2.com',
-      language: 'ko',
-      region: 'KR',
-      section_id: 2,
-      created_at: new Date('2025-07-18T00:00:00Z'),
     }
 
-    const mockArticle3: ProcessedArticle = {
+    const mockDetailedArticle3 = {
+      ...mockDetailedArticle,
       id: 3,
       title: 'Test Article 3',
-      one_line_summary: 'Summary 3',
-      full_summary: 'Full summary 3',
-      thumbnail_url: 'http://thumbnail3.com',
-      language: 'ko',
-      region: 'KR',
-      section_id: 3,
-      created_at: new Date('2025-07-19T00:00:00Z'),
     }
 
     it('Successfully return articles when cache exists', async () => {
       const userId = 1
       const limit = 1
       const mockUserCache = {
-        articleIds: [mockArticle1.id, mockArticle2.id, mockArticle3.id],
+        articleIds: [mockDetailedArticle1.id, mockDetailedArticle2.id, mockDetailedArticle3.id],
         lastUpdated: new Date(),
       }
 
-      ;(createCursor as jest.Mock).mockReturnValue('next-cursor')
+      mockCreateCursor.mockReturnValue('next-cursor')
       jest.spyOn(articleService, 'getCachedRecommendations').mockResolvedValue(mockUserCache)
-      jest.spyOn(articleService, 'getArticlesByIds').mockResolvedValue([mockArticle1])
+      jest.spyOn(articleService, 'getDetailedArticlesByIds').mockResolvedValue([mockDetailedArticle1])
 
       const result = await articleService.getRecommendedArticlesByCursor(userId, limit)
 
       expect(articleService.getCachedRecommendations).toHaveBeenCalledWith(userId)
-      expect(articleService.getArticlesByIds).toHaveBeenCalledWith(mockUserCache.articleIds.slice(0, limit))
+      expect(articleService.getDetailedArticlesByIds).toHaveBeenCalledWith(
+        mockUserCache.articleIds.slice(0, limit),
+        userId,
+      )
       expect(result).toEqual({
-        data: [mockArticle1],
+        data: [mockDetailedArticle1],
         hasNext: true,
         nextCursor: 'next-cursor',
       })
@@ -411,22 +471,27 @@ describe('ArticleService', () => {
       const userId = 1
       const limit = 2
       const mockUserCache = {
-        articleIds: [mockArticle1.id, mockArticle2.id, mockArticle3.id],
+        articleIds: [mockDetailedArticle1.id, mockDetailedArticle2.id, mockDetailedArticle3.id],
         lastUpdated: new Date(),
       }
 
-      ;(createCursor as jest.Mock).mockReturnValue('next-cursor')
+      mockCreateCursor.mockReturnValue('next-cursor')
       jest.spyOn(articleService, 'getCachedRecommendations').mockResolvedValue(null)
       jest.spyOn(articleService, 'regenerateUserCache').mockResolvedValue(mockUserCache)
-      jest.spyOn(articleService, 'getArticlesByIds').mockResolvedValue([mockArticle1, mockArticle2])
+      jest
+        .spyOn(articleService, 'getDetailedArticlesByIds')
+        .mockResolvedValue([mockDetailedArticle1, mockDetailedArticle2])
 
       const result = await articleService.getRecommendedArticlesByCursor(userId, limit)
 
       expect(articleService.getCachedRecommendations).toHaveBeenCalledWith(userId)
       expect(articleService.regenerateUserCache).toHaveBeenCalledWith(userId)
-      expect(articleService.getArticlesByIds).toHaveBeenCalledWith(mockUserCache.articleIds.slice(0, limit))
+      expect(articleService.getDetailedArticlesByIds).toHaveBeenCalledWith(
+        mockUserCache.articleIds.slice(0, limit),
+        userId,
+      )
       expect(result).toEqual({
-        data: [mockArticle1, mockArticle2],
+        data: [mockDetailedArticle1, mockDetailedArticle2],
         hasNext: true,
         nextCursor: 'next-cursor',
       })
@@ -436,74 +501,64 @@ describe('ArticleService', () => {
       const userId = 1
       const limit = 1
       const mockUserCache = {
-        articleIds: [mockArticle1.id, mockArticle2.id, mockArticle3.id],
+        articleIds: [mockDetailedArticle1.id, mockDetailedArticle2.id, mockDetailedArticle3.id],
         lastUpdated: new Date(),
       }
       const cursor = 'test-cursor'
       const decodedCursor = { idx: 1 }
 
       mockDecodeCursor.mockReturnValue(decodedCursor)
-      mockCreateCursor.mockReturnValue(cursor)
+      mockCreateCursor.mockReturnValue('next-cursor')
 
       jest.spyOn(articleService, 'getCachedRecommendations').mockResolvedValue(mockUserCache)
-      jest.spyOn(articleService, 'getArticlesByIds').mockResolvedValue([mockArticle2])
+      jest.spyOn(articleService, 'getDetailedArticlesByIds').mockResolvedValue([mockDetailedArticle2])
 
       const result = await articleService.getRecommendedArticlesByCursor(userId, limit, cursor)
 
       expect(articleService.getCachedRecommendations).toHaveBeenCalledWith(userId)
       expect(mockDecodeCursor).toHaveBeenCalledWith(cursor)
-      expect(articleService.getArticlesByIds).toHaveBeenCalledWith(
+      expect(articleService.getDetailedArticlesByIds).toHaveBeenCalledWith(
         mockUserCache.articleIds.slice(decodedCursor.idx, decodedCursor.idx + limit),
+        userId,
       )
       expect(result).toEqual({
-        data: [mockArticle2],
-        hasNext: true,
-        nextCursor: cursor,
-      })
-    })
-
-    it('Successfully return articles when cursor is not provided', async () => {
-      const userId = 1
-      const limit = 2
-      const mockUserCache = {
-        articleIds: [mockArticle1.id, mockArticle2.id, mockArticle3.id],
-        lastUpdated: new Date(),
-      }
-
-      ;(createCursor as jest.Mock).mockReturnValue('next-cursor')
-      jest.spyOn(articleService, 'getCachedRecommendations').mockResolvedValue(mockUserCache)
-      jest.spyOn(articleService, 'getArticlesByIds').mockResolvedValue([mockArticle1, mockArticle2])
-
-      const result = await articleService.getRecommendedArticlesByCursor(userId, limit)
-
-      expect(articleService.getCachedRecommendations).toHaveBeenCalledWith(userId)
-      expect(articleService.getArticlesByIds).toHaveBeenCalledWith(mockUserCache.articleIds.slice(0, limit))
-      expect(result).toEqual({
-        data: [mockArticle1, mockArticle2],
+        data: [mockDetailedArticle2],
         hasNext: true,
         nextCursor: 'next-cursor',
       })
     })
 
-    it('Should not generate cursor when no next page exists', async () => {
+    it('Returns no nextCursor when no more articles available', async () => {
       const userId = 1
-      const limit = 3
+      const limit = 2
       const mockUserCache = {
-        articleIds: [mockArticle1.id, mockArticle2.id],
+        articleIds: [mockDetailedArticle1.id, mockDetailedArticle2.id],
         lastUpdated: new Date(),
       }
 
-      jest.spyOn(articleService, 'getCachedRecommendations').mockResolvedValue(mockUserCache)
-      jest.spyOn(articleService, 'getArticlesByIds').mockResolvedValue([mockArticle1, mockArticle2])
+      const cursor = 'test-cursor'
+      const decodedCursor = { idx: 0 }
 
-      const result = await articleService.getRecommendedArticlesByCursor(userId, limit)
+      mockDecodeCursor.mockReturnValue(decodedCursor)
+      mockCreateCursor.mockReturnValue('next-cursor')
+
+      jest.spyOn(articleService, 'getCachedRecommendations').mockResolvedValue(mockUserCache)
+      jest
+        .spyOn(articleService, 'getDetailedArticlesByIds')
+        .mockResolvedValue([mockDetailedArticle1, mockDetailedArticle2])
+
+      const result = await articleService.getRecommendedArticlesByCursor(userId, limit, cursor)
 
       expect(articleService.getCachedRecommendations).toHaveBeenCalledWith(userId)
-      expect(articleService.getArticlesByIds).toHaveBeenCalledWith(mockUserCache.articleIds.slice(0, limit))
+      expect(mockDecodeCursor).toHaveBeenCalledWith(cursor)
+      expect(articleService.getDetailedArticlesByIds).toHaveBeenCalledWith(
+        mockUserCache.articleIds.slice(decodedCursor.idx, decodedCursor.idx + limit),
+        userId,
+      )
       expect(result).toEqual({
-        data: [mockArticle1, mockArticle2],
+        data: [mockDetailedArticle1, mockDetailedArticle2],
         hasNext: false,
-        nextCursor: undefined,
+        // nextCursor가 없어야 함
       })
     })
   })

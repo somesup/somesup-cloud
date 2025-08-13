@@ -1295,6 +1295,112 @@ components:
           type: integer
           example: 50
 
+    ArticleSection:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: 'politics'
+        friendlyName:
+          type: string
+          example: '정치'
+
+    ArticleProvider:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 2
+        name:
+          type: string
+          example: 'Example News Provider'
+        friendlyName:
+          type: string
+          example: '예시 뉴스 제공자'
+        newsUrl:
+          type: string
+          example: 'https://example.com/news'
+        logoUrl:
+          type: string
+          example: 'https://example.com/logo.png'
+
+    ArticleKeyword:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: 'election'
+
+    ArticleLikeInfo:
+      type: object
+      properties:
+        isLiked:
+          type: boolean
+          example: true
+        count:
+          type: integer
+          example: 150
+
+    ArticleScrapInfo:
+      type: object
+      properties:
+        isScrapped:
+          type: boolean
+          example: true
+        count:
+          type: integer
+          example: 75
+
+    DetailedProcessedArticle:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        section:
+          $ref: '#/components/schemas/ArticleSection'
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ArticleProvider'
+        keywords:
+          type: array
+          items:
+            $ref: '#/components/schemas/ArticleKeyword'
+        title:
+          type: string
+          example: 'Example Article Title'
+        oneLineSummary:
+          type: string
+          example: '이 기사는 정치에 관한 내용입니다.'
+        fullSummary:
+          type: string
+          example: '기사의 전체 요약 내용입니다.'
+        language:
+          type: string
+          example: 'ko'
+        region:
+          type: string
+          nullable: true
+          example: 'Seoul'
+        thumbnailUrl:
+          type: string
+          example: 'https://example.com/image.jpg'
+        createdAt:
+          type: string
+          format: date-time
+          example: '2023-09-21T12:00:00.000Z'
+        like:
+          $ref: '#/components/schemas/ArticleLikeInfo'
+        scrap:
+          $ref: '#/components/schemas/ArticleScrapInfo'
+
     ArticleCursorPaginationResponse:
       type: object
       properties:
@@ -1304,7 +1410,7 @@ components:
         data:
           type: array
           items:
-            $ref: '#/components/schemas/Article'
+            $ref: '#/components/schemas/DetailedProcessedArticle'
         pagination:
           type: object
           properties:

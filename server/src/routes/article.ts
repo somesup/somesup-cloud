@@ -22,7 +22,7 @@ router.get('/', authenticateJWT, getArticles)
  * 특정 기사 조회
  * GET /:id
  */
-router.get('/:id', getArticleById)
+router.get('/:id', authenticateJWT, getArticleById)
 
 /**
  * 특정 기사에 좋아요 추가

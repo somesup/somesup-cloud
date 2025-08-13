@@ -118,32 +118,47 @@ describe('articleController', () => {
 
   describe('getArticleById', () => {
     it('should get article and call success on success', async () => {
+      req.userId = 1
       req.params.id = '42'
       const article = { id: 42, title: 'test' }
-      ;(articleService.getArticleById as jest.Mock).mockResolvedValue(article)
+      ;(articleService.getDetailedArticleById as jest.Mock).mockResolvedValue(article)
 
       await getArticleById(req, res)
 
-      expect(articleService.getArticleById).toHaveBeenCalledWith(42)
+      expect(articleService.getDetailedArticleById).toHaveBeenCalledWith(42, 1)
       expect(mockSuccess).toHaveBeenCalledWith(res, article, {
         message: 'Article retrieved successfully',
       })
     })
 
-    it('should parse id as integer', async () => {
-      req.params.id = '3'
-      const article = { id: 3 }
-      ;(articleService.getArticleById as jest.Mock).mockResolvedValue(article)
+    it('should return unauthorized if userId is missing', async () => {
+      req.userId = null
+      req.params.id = '42'
 
       await getArticleById(req, res)
 
-      expect(articleService.getArticleById).toHaveBeenCalledWith(3)
+      expect(errors.unauthorized).toHaveBeenCalledWith(res, 'User ID is required')
+      expect(mockSuccess).not.toHaveBeenCalled()
+    })
+
+    it('should parse id as integer', async () => {
+      req.userId = 1
+      req.params.id = '3'
+      const article = { id: 3 }
+      ;(articleService.getDetailedArticleById as jest.Mock).mockResolvedValue(article)
+
+      await getArticleById(req, res)
+
+      expect(articleService.getDetailedArticleById).toHaveBeenCalledWith(3, 1)
       expect(mockSuccess).toHaveBeenCalled()
     })
 
     it('should respond with not found if article does not exist', async () => {
+      req.userId = 1
       req.params.id = '100'
-      ;(articleService.getArticleById as jest.Mock).mockRejectedValue(new ArticleNotFoundError('Article not found'))
+      ;(articleService.getDetailedArticleById as jest.Mock).mockRejectedValue(
+        new ArticleNotFoundError('Article not found'),
+      )
 
       await getArticleById(req, res)
 
@@ -153,8 +168,9 @@ describe('articleController', () => {
     })
 
     it('should respond with internal error on service exception', async () => {
+      req.userId = 1
       req.params.id = '100'
-      ;(articleService.getArticleById as jest.Mock).mockRejectedValue(new Error('err'))
+      ;(articleService.getDetailedArticleById as jest.Mock).mockRejectedValue(new Error('err'))
       await getArticleById(req, res)
       expect(consoleErrorSpy).toHaveBeenCalledWith('Error retrieving article:', expect.any(Error))
       expect(mockInternalError).toHaveBeenCalledWith(res)
