@@ -171,16 +171,136 @@ export const articleService = {
   },
 
   /**
-   * 사용자별 추천 기사를 커서 페이지네이션 방식으로 조회합니다.
+   * 사용자의 추천 기사 ID를 조회합니다.
+   * 이 함수는 캐시된 추천 기사를 조회하고, 없으면 사용자 캐시를 재생성합니다.
+   * @param userId - 추천 기사를 조회할 사용자의 ID
+   * @return Promise<number[]> - 추천 기사 ID 배열
+   * @example
+   * // 사용자 1의 추천 기사 ID를 조회
+   * fetchRecommendedArticleIds(1)
+   */
+  fetchRecommendedArticleIds: async (userId: number): Promise<number[]> => {
+    const cached = await articleService.getCachedRecommendations(userId)
+
+    if (cached) {
+      return cached.articleIds
+    }
+
+    // 캐시가 없으면 사용자 캐시를 재생성합니다.
+    const newCache = await articleService.regenerateUserCache(userId)
+    return newCache.articleIds
+  },
+
+  /**
+   * 사용자가 스크랩한 기사 ID를 조회합니다.
+   * @param userId - 스크랩한 기사를 조회할 사용자의 ID
+   * @return Promise<number[]> - 스크랩한 기사 ID 배열
+   * @example
+   * // 사용자 1이 스크랩한 기사 ID를 조회
+   * fetchScrapedArticleIds(1)
+   */
+  fetchScrapedArticleIds: async (userId: number): Promise<number[]> => {
+    const scraped = await prisma.processedArticle.findMany({
+      where: {
+        scraps: { some: { user_id: userId } },
+      },
+      select: { id: true },
+    })
+    return scraped.map((a) => a.id)
+  },
+
+  /**
+   * 사용자가 좋아요한 기사 ID를 조회합니다.
+   * @param userId - 좋아요한 기사를 조회할 사용자의 ID
+   * @return Promise<number[]> - 좋아요한 기사 ID 배열
+   * @example
+   * // 사용자 1이 좋아요한 기사 ID를 조회
+   * fetchLikedArticleIds(1)
+   */
+  fetchLikedArticleIds: async (userId: number): Promise<number[]> => {
+    const liked = await prisma.processedArticle.findMany({
+      where: {
+        likes: { some: { user_id: userId } },
+      },
+      select: { id: true },
+    })
+    return liked.map((a) => a.id)
+  },
+
+  /**
+   * 추천된 기사들을 커서 페이지네이션으로 조회합니다.
+   * 이 함수는 사용자의 추천 기사 ID를 가져와 커서와 한계에 따라 결과를 반환합니다.
    * @param userId - 추천 기사를 조회할 사용자의 ID
    * @param limit - 한 번에 조회할 기사 수
-   * @param cursor - 다음 페이지를 위한 커서 (기본값: undefined)
-   * @return ArticleCursorPaginationResult - 조회된 기사와 페이지네이션 정보
+   * @param cursor - 다음 페이지를 조회하기 위한 커서 (Optional)
+   * @return Promise<ArticleCursorPaginationResult> - 커서 페이지네이션 결과
    * @example
-   * // 사용자 1의 추천 기사 10개를 조회
-   * getRecommendedArticlesByCursor(1, 10)
+   * // 사용자 1의 추천 기사를 커서 10개씩 조회
+   *  getRecommendedArticlesByCursor(1, 10, 'cursorString')
    */
   getRecommendedArticlesByCursor: async (
+    userId: number,
+    limit: number,
+    cursor?: string,
+  ): Promise<ArticleCursorPaginationResult> => {
+    const articleIds = await articleService.fetchRecommendedArticleIds(userId)
+    return articleService.getArticlesByCursor(articleIds, userId, limit, cursor)
+  },
+
+  /**
+   * 사용자가 스크랩한 기사들을 커서 페이지네이션으로 조회합니다.
+   * 이 함수는 사용자의 스크랩한 기사 ID를 가져와 커서와 한계에 따라 결과를 반환합니다.
+   * @param userId - 스크랩한 기사를 조회할 사용자의 ID
+   * @param limit - 한 번에 조회할 기사 수
+   * @param cursor - 다음 페이지를 조회하기 위한 커서 (Optional)
+   * @return Promise<ArticleCursorPaginationResult> - 커서 페이지네이션 결과
+   * @example
+   * // 사용자 1의 스크랩한 기사를 커서 10개씩 조회
+   *  getScrapedArticlesByCursor(1, 10, 'cursorString')
+   */
+  getScrapedArticlesByCursor: async (
+    userId: number,
+    limit: number,
+    cursor?: string,
+  ): Promise<ArticleCursorPaginationResult> => {
+    const articleIds = await articleService.fetchScrapedArticleIds(userId)
+    return articleService.getArticlesByCursor(articleIds, userId, limit, cursor)
+  },
+
+  /**
+   * 사용자가 좋아요한 기사들을 커서 페이지네이션으로 조회합니다.
+   * 이 함수는 사용자의 좋아요한 기사 ID를 가져와 커서와 한계에 따라 결과를 반환합니다.
+   * @param userId - 좋아요한 기사를 조회할 사용자의 ID
+   * @param limit - 한 번에 조회할 기사 수
+   * @param cursor - 다음 페이지를 조회하기 위한 커서 (Optional)
+   * @return Promise<ArticleCursorPaginationResult> - 커서 페이지네이션 결과
+   * @example
+   * // 사용자 1의 좋아요한 기사를 커서 10개씩 조회
+   *  getLikedArticlesByCursor(1, 10, 'cursorString')
+   */
+  getLikedArticlesByCursor: async (
+    userId: number,
+    limit: number,
+    cursor?: string,
+  ): Promise<ArticleCursorPaginationResult> => {
+    const articleIds = await articleService.fetchLikedArticleIds(userId)
+    return articleService.getArticlesByCursor(articleIds, userId, limit, cursor)
+  },
+
+  /**
+   * 커서 페이지네이션을 사용하여 기사를 조회합니다.
+   * 이 함수는 주어진 ID 배열에서 기사를 가져오고, 커서와 한계에 따라 결과를 반환합니다.
+   * @param fetchIdsFn - ID를 가져오는 함수
+   * @param userId - 사용자의 ID (좋아요/스크랩 여부 확인용)
+   * @param limit - 한 번에 조회할 기사 수
+   * @param cursor - 다음 페이지를 조회하기 위한 커서 (Optional)
+   * @return Promise<ArticleCursorPaginationResult> - 커서 페이지네이션 결과
+   * @example
+   * // 특정 ID의 기사를 커서 10개씩 조회
+   * getArticlesByCursor(() => Promise.resolve([1, 2, 3]), 1, 10, 'cursorString')
+   */
+  getArticlesByCursor: async (
+    articleIds: number[],
     userId: number,
     limit: number,
     cursor?: string,
@@ -191,23 +311,21 @@ export const articleService = {
       cursorIdx = decodedCursor.idx
     }
 
-    let userCache = await articleService.getCachedRecommendations(userId)
+    const allArticles = await articleService.getDetailedArticlesByIds(articleIds, userId)
+    const articles = allArticles.slice(cursorIdx, cursorIdx + limit)
 
-    if (!userCache) {
-      userCache = await articleService.regenerateUserCache(userId)
+    if (articles.length === 0) {
+      throw new ArticleNotFoundError('No articles found for the given cursor and limit')
     }
 
-    const articleIds = userCache.articleIds.slice(cursorIdx, cursorIdx + limit)
-    const articles = await articleService.getDetailedArticlesByIds(articleIds, userId)
-
     const nextIdx = cursorIdx + limit
-    const hasNext = nextIdx < userCache.articleIds.length
+    const hasNext = nextIdx < allArticles.length
     const nextCursor = hasNext ? createCursor(nextIdx) : undefined
 
     return {
       data: articles,
-      hasNext,
-      nextCursor,
+      hasNext: hasNext,
+      nextCursor: nextCursor,
     }
   },
 

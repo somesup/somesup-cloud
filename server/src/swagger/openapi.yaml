@@ -302,6 +302,16 @@ paths:
           schema:
             type: string
           description: 커서 값 (이후 페이지 조회 시 사용)
+        - in: query
+          name: scrapped
+          schema:
+            type: boolean
+          description: 스크랩된 기사만 조회할지 여부 (기본값 false)
+        - in: query
+          name: liked
+          schema:
+            type: boolean
+          description: 좋아요한 기사만 조회할지 여부 (기본값 false)
       responses:
         '200':
           description: 기사 목록 조회 성공

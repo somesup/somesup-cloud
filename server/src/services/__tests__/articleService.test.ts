@@ -422,144 +422,206 @@ describe('ArticleService', () => {
     })
   })
 
-  describe('getRecommendedArticlesByCursor', () => {
-    const mockDetailedArticle1 = {
-      ...mockDetailedArticle,
-      id: 1,
-      title: 'Test Article 1',
-    }
-
-    const mockDetailedArticle2 = {
-      ...mockDetailedArticle,
-      id: 2,
-      title: 'Test Article 2',
-    }
-
-    const mockDetailedArticle3 = {
-      ...mockDetailedArticle,
-      id: 3,
-      title: 'Test Article 3',
-    }
-
-    it('Successfully return articles when cache exists', async () => {
-      const userId = 1
-      const limit = 1
-      const mockUserCache = {
-        articleIds: [mockDetailedArticle1.id, mockDetailedArticle2.id, mockDetailedArticle3.id],
-        lastUpdated: new Date(),
-      }
-
-      mockCreateCursor.mockReturnValue('next-cursor')
-      jest.spyOn(articleService, 'getCachedRecommendations').mockResolvedValue(mockUserCache)
-      jest.spyOn(articleService, 'getDetailedArticlesByIds').mockResolvedValue([mockDetailedArticle1])
-
-      const result = await articleService.getRecommendedArticlesByCursor(userId, limit)
-
-      expect(articleService.getCachedRecommendations).toHaveBeenCalledWith(userId)
-      expect(articleService.getDetailedArticlesByIds).toHaveBeenCalledWith(
-        mockUserCache.articleIds.slice(0, limit),
-        userId,
-      )
-      expect(result).toEqual({
-        data: [mockDetailedArticle1],
-        hasNext: true,
-        nextCursor: 'next-cursor',
-      })
-    })
-
-    it('Successfully return articles when cache does not exist', async () => {
+  describe('getArticlesByCursor', () => {
+    it('should return articles with correct parameters', async () => {
+      const articleIds = [1, 2, 3]
       const userId = 1
       const limit = 2
-      const mockUserCache = {
-        articleIds: [mockDetailedArticle1.id, mockDetailedArticle2.id, mockDetailedArticle3.id],
-        lastUpdated: new Date(),
-      }
-
-      mockCreateCursor.mockReturnValue('next-cursor')
-      jest.spyOn(articleService, 'getCachedRecommendations').mockResolvedValue(null)
-      jest.spyOn(articleService, 'regenerateUserCache').mockResolvedValue(mockUserCache)
-      jest
-        .spyOn(articleService, 'getDetailedArticlesByIds')
-        .mockResolvedValue([mockDetailedArticle1, mockDetailedArticle2])
-
-      const result = await articleService.getRecommendedArticlesByCursor(userId, limit)
-
-      expect(articleService.getCachedRecommendations).toHaveBeenCalledWith(userId)
-      expect(articleService.regenerateUserCache).toHaveBeenCalledWith(userId)
-      expect(articleService.getDetailedArticlesByIds).toHaveBeenCalledWith(
-        mockUserCache.articleIds.slice(0, limit),
-        userId,
-      )
-      expect(result).toEqual({
-        data: [mockDetailedArticle1, mockDetailedArticle2],
-        hasNext: true,
-        nextCursor: 'next-cursor',
-      })
-    })
-
-    it('Successfully return articles when cursor is provided', async () => {
-      const userId = 1
-      const limit = 1
-      const mockUserCache = {
-        articleIds: [mockDetailedArticle1.id, mockDetailedArticle2.id, mockDetailedArticle3.id],
-        lastUpdated: new Date(),
-      }
       const cursor = 'test-cursor'
-      const decodedCursor = { idx: 1 }
+      const decodedCursor = { idx: 0 }
+
+      const mockArticles = [
+        { id: 1, title: 'Article 1' },
+        { id: 2, title: 'Article 2' },
+        { id: 3, title: 'Article 3' },
+      ]
 
       mockDecodeCursor.mockReturnValue(decodedCursor)
-      mockCreateCursor.mockReturnValue('next-cursor')
+      jest.spyOn(articleService, 'getDetailedArticlesByIds').mockResolvedValue(mockArticles)
 
-      jest.spyOn(articleService, 'getCachedRecommendations').mockResolvedValue(mockUserCache)
-      jest.spyOn(articleService, 'getDetailedArticlesByIds').mockResolvedValue([mockDetailedArticle2])
+      const result = await articleService.getArticlesByCursor(articleIds, userId, limit, cursor)
 
-      const result = await articleService.getRecommendedArticlesByCursor(userId, limit, cursor)
-
-      expect(articleService.getCachedRecommendations).toHaveBeenCalledWith(userId)
       expect(mockDecodeCursor).toHaveBeenCalledWith(cursor)
-      expect(articleService.getDetailedArticlesByIds).toHaveBeenCalledWith(
-        mockUserCache.articleIds.slice(decodedCursor.idx, decodedCursor.idx + limit),
-        userId,
-      )
+      expect(articleService.getDetailedArticlesByIds).toHaveBeenCalledWith(articleIds, userId)
+      expect(mockCreateCursor).toHaveBeenCalledWith(decodedCursor.idx + limit)
       expect(result).toEqual({
-        data: [mockDetailedArticle2],
-        hasNext: true,
-        nextCursor: 'next-cursor',
+        data: mockArticles.slice(decodedCursor.idx, decodedCursor.idx + limit),
+        hasNext: articleIds.length > decodedCursor.idx + limit,
+        nextCursor: mockCreateCursor(decodedCursor.idx + limit),
       })
     })
 
-    it('Returns no nextCursor when no more articles available', async () => {
+    it('should return articles with no cursor', async () => {
+      const articleIds = [1, 2, 3]
+      const userId = 1
+      const limit = 10
+
+      const mockArticles = [
+        { id: 1, title: 'Article 1' },
+        { id: 2, title: 'Article 2' },
+        { id: 3, title: 'Article 3' },
+      ]
+
+      jest.spyOn(articleService, 'getDetailedArticlesByIds').mockResolvedValue(mockArticles)
+
+      const result = await articleService.getArticlesByCursor(articleIds, userId, limit)
+
+      expect(articleService.getDetailedArticlesByIds).toHaveBeenCalledWith(articleIds, userId)
+      expect(result).toEqual({
+        data: mockArticles.slice(0, limit),
+        hasNext: articleIds.length > limit,
+        nextCursor: mockCreateCursor(limit),
+      })
+    })
+
+    it('should throw ArticleNotFoundError when no articles found', async () => {
+      const articleIds = [1, 2, 3]
       const userId = 1
       const limit = 2
-      const mockUserCache = {
-        articleIds: [mockDetailedArticle1.id, mockDetailedArticle2.id],
-        lastUpdated: new Date(),
-      }
-
       const cursor = 'test-cursor'
       const decodedCursor = { idx: 0 }
 
       mockDecodeCursor.mockReturnValue(decodedCursor)
-      mockCreateCursor.mockReturnValue('next-cursor')
+      jest.spyOn(articleService, 'getDetailedArticlesByIds').mockResolvedValue([])
 
-      jest.spyOn(articleService, 'getCachedRecommendations').mockResolvedValue(mockUserCache)
-      jest
-        .spyOn(articleService, 'getDetailedArticlesByIds')
-        .mockResolvedValue([mockDetailedArticle1, mockDetailedArticle2])
+      await expect(articleService.getArticlesByCursor(articleIds, userId, limit, cursor)).rejects.toThrow(
+        ArticleNotFoundError,
+      )
+    })
+  })
+
+  describe('fetchRecommendedArticleIds', () => {
+    it('should return recommended article IDs from cache if exists', async () => {
+      const userId = 1
+      const mockCache = {
+        articleIds: [1, 2, 3],
+        lastUpdated: new Date(),
+      }
+
+      jest.spyOn(articleService, 'getCachedRecommendations').mockResolvedValue(mockCache)
+
+      const result = await articleService.fetchRecommendedArticleIds(userId)
+
+      expect(articleService.getCachedRecommendations).toHaveBeenCalledWith(userId)
+      expect(result).toEqual(mockCache.articleIds)
+    })
+
+    it('should regenerate cache if no cached recommendations exists', async () => {
+      const userId = 1
+      const mockCache = {
+        articleIds: [1, 2, 3],
+        lastUpdated: new Date(),
+      }
+
+      jest.spyOn(articleService, 'getCachedRecommendations').mockResolvedValue(null)
+      jest.spyOn(articleService, 'regenerateUserCache').mockResolvedValue(mockCache)
+
+      const result = await articleService.fetchRecommendedArticleIds(userId)
+
+      expect(articleService.getCachedRecommendations).toHaveBeenCalledWith(userId)
+      expect(articleService.regenerateUserCache).toHaveBeenCalledWith(userId)
+      expect(result).toEqual(mockCache.articleIds)
+    })
+  })
+
+  describe('fetchScrapedArticleIds', () => {
+    it('should return scraped article IDs for a user', async () => {
+      const userId = 1
+      const mockScrapedArticles = [{ id: 1 }, { id: 2 }, { id: 3 }]
+
+      ;(prismaMock.processedArticle.findMany as jest.Mock).mockResolvedValue(mockScrapedArticles)
+
+      const result = await articleService.fetchScrapedArticleIds(userId)
+
+      expect(prismaMock.processedArticle.findMany).toHaveBeenCalledWith({
+        where: {
+          scraps: { some: { user_id: userId } },
+        },
+        select: { id: true },
+      })
+      expect(result).toEqual([1, 2, 3])
+    })
+  })
+
+  describe('fetchLikedArticleIds', () => {
+    it('should return liked article IDs for a user', async () => {
+      const userId = 1
+      const mockLikedArticles = [{ id: 1 }, { id: 2 }, { id: 3 }]
+
+      ;(prismaMock.processedArticle.findMany as jest.Mock).mockResolvedValue(mockLikedArticles)
+
+      const result = await articleService.fetchLikedArticleIds(userId)
+
+      expect(prismaMock.processedArticle.findMany).toHaveBeenCalledWith({
+        where: {
+          likes: { some: { user_id: userId } },
+        },
+        select: { id: true },
+      })
+      expect(result).toEqual([1, 2, 3])
+    })
+  })
+
+  describe('getRecommendedArticleByCursor', () => {
+    it('should return getArticlesByCursor with correct parameters', async () => {
+      const userId = 1
+      const limit = 10
+      const cursor = 'test-cursor'
+      const mockArticleIds = [1, 2, 3]
+
+      jest.spyOn(articleService, 'fetchRecommendedArticleIds').mockResolvedValue(mockArticleIds)
+      jest.spyOn(articleService, 'getArticlesByCursor').mockResolvedValue({
+        data: [],
+        hasNext: false,
+        nextCursor: 'next-cursor',
+      })
 
       const result = await articleService.getRecommendedArticlesByCursor(userId, limit, cursor)
 
-      expect(articleService.getCachedRecommendations).toHaveBeenCalledWith(userId)
-      expect(mockDecodeCursor).toHaveBeenCalledWith(cursor)
-      expect(articleService.getDetailedArticlesByIds).toHaveBeenCalledWith(
-        mockUserCache.articleIds.slice(decodedCursor.idx, decodedCursor.idx + limit),
-        userId,
-      )
-      expect(result).toEqual({
-        data: [mockDetailedArticle1, mockDetailedArticle2],
+      expect(articleService.fetchRecommendedArticleIds).toHaveBeenCalledWith(userId)
+      expect(articleService.getArticlesByCursor).toHaveBeenCalledWith(mockArticleIds, userId, limit, cursor)
+    })
+  })
+
+  describe('getScrapedArticlesByCursor', () => {
+    it('should return getArticlesByCursor with correct parameters', async () => {
+      const userId = 1
+      const limit = 10
+      const cursor = 'test-cursor'
+      const mockArticleIds = [1, 2, 3]
+
+      jest.spyOn(articleService, 'fetchScrapedArticleIds').mockResolvedValue(mockArticleIds)
+      jest.spyOn(articleService, 'getArticlesByCursor').mockResolvedValue({
+        data: [],
         hasNext: false,
-        // nextCursor가 없어야 함
+        nextCursor: 'next-cursor',
       })
+
+      const result = await articleService.getScrapedArticlesByCursor(userId, limit, cursor)
+
+      expect(articleService.fetchScrapedArticleIds).toHaveBeenCalledWith(userId)
+      expect(articleService.getArticlesByCursor).toHaveBeenCalledWith(mockArticleIds, userId, limit, cursor)
+    })
+  })
+
+  describe('getLikedArticlesByCursor', () => {
+    it('should return getArticlesByCursor with correct parameters', async () => {
+      const userId = 1
+      const limit = 10
+      const cursor = 'test-cursor'
+      const mockArticleIds = [1, 2, 3]
+
+      jest.spyOn(articleService, 'fetchLikedArticleIds').mockResolvedValue(mockArticleIds)
+      jest.spyOn(articleService, 'getArticlesByCursor').mockResolvedValue({
+        data: [],
+        hasNext: false,
+        nextCursor: 'next-cursor',
+      })
+
+      const result = await articleService.getLikedArticlesByCursor(userId, limit, cursor)
+
+      expect(articleService.fetchLikedArticleIds).toHaveBeenCalledWith(userId)
+      expect(articleService.getArticlesByCursor).toHaveBeenCalledWith(mockArticleIds, userId, limit, cursor)
     })
   })
 

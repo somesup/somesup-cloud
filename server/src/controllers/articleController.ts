@@ -1,30 +1,17 @@
-import { Request, Response } from 'express'
+import { Response } from 'express'
 import { errors, success, successWithCursor } from '../utils/response'
 import { ArticleNotFoundError, articleService } from '../services/articleService'
 import { AuthenticatedRequest } from '../middlewares/authenticateJWT'
 import { ArticleViewEventType } from '@prisma/client'
 
 /**
- * Cursor 기반 페이지네이션을 사용하여 기사 목록을 가져오는 컨트롤러입니다.
- * 사용자가 요청한 limit와 cursor를 기반으로 기사를 조회합니다.
- * @param {Request} req - Express 요청 객체. 쿼리 파라미터로 limit와 cursor가 포함되어야 합니다.
+ * 사용자가 추천된 기사를 조회하는 컨트롤러입니다.
+ * 사용자가 인증된 상태에서 추천된 기사를 조회할 수 있습니다.
+ * @param {AuthenticatedRequest} req - 인증된 사용자 요청 객체. userId와 쿼리 파라미터가 포함되어야 합니다.
  * @param {Response} res - Express 응답 객체.
  * @example
  * // 요청 예시
- * GET /api/articles?limit=10&cursor=eyJjcmVhdGVkQXQiOiIyMDIzLTA5LTIxVDEyOjAwOjAwLjAwMFoiLCJpZCI6MX0=
- * * // 응답 예시
- * {
- *  "data": [
- *    {
- *    "id": 1,
- *    ...나머지 기사 데이터...
- *    }
- *  ],
- *  "pagination": {
- *    "hasNext": true,
- *    "nextCursor": "eyJjcmVhdGVkQXQiOiIyMDIzLTA5LTIxVDEyOjAwOjAwLjAwMFoiLCJpZCI6Mn0="
- *  }
- * }
+ * GET /api/articles?limit=10&cursor=abc123&scraped=false&liked=false
  */
 export const getArticles = async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.userId
@@ -32,23 +19,37 @@ export const getArticles = async (req: AuthenticatedRequest, res: Response) => {
     return errors.unauthorized(res, 'User ID is required')
   }
 
-  const limit = parseInt(req.query.limit as string, 10) || 10
-  if (limit < 1 || limit > 100) {
-    return errors.badRequest(res, 'Limit must be between 1 and 100')
-  }
-
+  const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined
   const cursor = req.query.cursor as string | undefined
+  const scrapped: boolean = req.query.scraped === 'true'
+  const liked: boolean = req.query.liked === 'true'
 
-  const { data, hasNext, nextCursor } = await articleService.getRecommendedArticlesByCursor(userId, limit, cursor)
-  if (!data || data.length === 0) {
-    return errors.notFound(res, 'No articles found')
+  if (!limit || limit < 1 || limit > 100) {
+    return errors.badRequest(res, 'Invalid limit. It must be a number between 1 and 100.')
   }
 
-  return successWithCursor(res, data, {
-    hasNext,
-    nextCursor,
-    message: 'Articles retrieved successfully',
-  })
+  try {
+    let result
+    if (scrapped) {
+      result = await articleService.getScrapedArticlesByCursor(userId, limit, cursor)
+    } else if (liked) {
+      result = await articleService.getLikedArticlesByCursor(userId, limit, cursor)
+    } else {
+      result = await articleService.getRecommendedArticlesByCursor(userId, limit, cursor)
+    }
+
+    return successWithCursor(res, result.data, {
+      hasNext: result.hasNext,
+      nextCursor: result.nextCursor,
+      message: 'Articles retreived successfully',
+    })
+  } catch (error) {
+    if (error instanceof ArticleNotFoundError) {
+      return errors.notFound(res, 'No articles found')
+    }
+    console.error('Error retrieving articles:', error)
+    return errors.internal(res)
+  }
 }
 
 /**
