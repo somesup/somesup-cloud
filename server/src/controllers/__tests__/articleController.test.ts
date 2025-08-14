@@ -142,6 +142,28 @@ describe('articleController', () => {
       })
     })
 
+    it('should return highlight articles successfully', async () => {
+      req.userId = 1
+      req.query = { limit: '10', highlight: 'true' }
+
+      const mockHighlightArticlesByCursor = {
+        data: [{ id: 1, title: 'Article 1' }],
+        hasNext: false,
+        nextCursor: null,
+      }
+
+      ;(articleService.getHighlightArticlesByCursor as jest.Mock).mockResolvedValue(mockHighlightArticlesByCursor)
+
+      await getArticles(req, res)
+
+      expect(articleService.getHighlightArticlesByCursor).toHaveBeenCalledWith(1, 10, undefined)
+      expect(mockSuccessWithCursor).toHaveBeenCalledWith(res, mockHighlightArticlesByCursor.data, {
+        hasNext: mockHighlightArticlesByCursor.hasNext,
+        nextCursor: mockHighlightArticlesByCursor.nextCursor,
+        message: 'Articles retreived successfully',
+      })
+    })
+
     it('should return not found if no articles are found', async () => {
       req.userId = 1
       req.query = { limit: '10' }

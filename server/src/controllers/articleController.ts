@@ -23,6 +23,7 @@ export const getArticles = async (req: AuthenticatedRequest, res: Response) => {
   const cursor = req.query.cursor as string | undefined
   const scrapped: boolean = req.query.scraped === 'true'
   const liked: boolean = req.query.liked === 'true'
+  const highlight: boolean = req.query.highlight === 'true'
 
   if (!limit || limit < 1 || limit > 100) {
     return errors.badRequest(res, 'Invalid limit. It must be a number between 1 and 100.')
@@ -34,6 +35,8 @@ export const getArticles = async (req: AuthenticatedRequest, res: Response) => {
       result = await articleService.getScrapedArticlesByCursor(userId, limit, cursor)
     } else if (liked) {
       result = await articleService.getLikedArticlesByCursor(userId, limit, cursor)
+    } else if (highlight) {
+      result = await articleService.getHighlightArticlesByCursor(userId, limit, cursor)
     } else {
       result = await articleService.getRecommendedArticlesByCursor(userId, limit, cursor)
     }
