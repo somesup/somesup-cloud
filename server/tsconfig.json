@@ -1,6 +1,12 @@
 {
   "extends": "@tsconfig/node20/tsconfig.json",
   "compilerOptions": {
-    "isolatedModules": true
-  }
+    "isolatedModules": true,
+    "outDir": "./dist"
+  },
+  "exclude": [
+    "src/**/*.spec.ts",
+    "src/**/*.test.ts",
+    "node_modules"
+  ]
 }

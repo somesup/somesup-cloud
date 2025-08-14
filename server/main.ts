@@ -14,14 +14,17 @@ import userRouter from './src/routes/user'
 import sectionRouter from './src/routes/section'
 import { registerCronJobs } from './src/utils/cron'
 
-const swaggerYamlPath = path.join(__dirname, './build/swagger.yaml')
-const swaggerDocument = YAML.load(swaggerYamlPath)
-
 redisClient.connect()
 
 const app = Express()
 app.use(Express.json())
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument))
+
+if (process.env.NODE_ENV !== 'production') {
+  const swaggerYamlPath = path.join(__dirname, './build/swagger.yaml')
+  const swaggerDocument = YAML.load(swaggerYamlPath)
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument))
+}
+
 app.use('/api/articles', articleRouter)
 app.use('/api/auth', authRouter)
 app.use('/api/users', userRouter)

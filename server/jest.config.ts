@@ -4,4 +4,5 @@ module.exports = {
   testEnvironment: 'node',
   setupFilesAfterEnv: ['./prisma/mock.ts'],
   setupFiles: ['./jest.env.ts'],
+  roots: ['<rootDir>/src'],
 }
