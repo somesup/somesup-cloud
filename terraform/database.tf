@@ -76,6 +76,18 @@ data "google_secret_manager_secret_version" "mysql_embedding_calculator_password
   version = "latest"
 }
 
+data "google_secret_manager_secret_version" "mysql_server_username" {
+  project = var.project
+  secret  = "MYSQL_SERVER_USERNAME"
+  version = "latest"
+}
+
+data "google_secret_manager_secret_version" "mysql_server_password" {
+  project = var.project
+  secret  = "MYSQL_SERVER_PASSWORD"
+  version = "latest"
+}
+
 resource "google_sql_user" "admin" {
   project  = var.project
   instance = google_sql_database_instance.mysql.name
@@ -102,6 +114,13 @@ resource "google_sql_user" "embedding_calculator" {
   instance = google_sql_database_instance.mysql.name
   name     = data.google_secret_manager_secret_version.mysql_embedding_calculator_username.secret_data
   password = data.google_secret_manager_secret_version.mysql_embedding_calculator_password.secret_data
+}
+
+resource "google_sql_user" "server" {
+  project  = var.project
+  instance = google_sql_database_instance.mysql.name
+  name     = data.google_secret_manager_secret_version.mysql_server_username.secret_data
+  password = data.google_secret_manager_secret_version.mysql_server_password.secret_data
 }
 
 # NOTE: There are SQL codes that configures schema in src/sql.
