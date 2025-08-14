@@ -111,6 +111,9 @@ const mockDetailedArticle: DetailedProcessedArticle = {
 describe('ArticleService', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+  })
+
+  afterEach(() => {
     jest.restoreAllMocks()
   })
 
@@ -306,6 +309,7 @@ describe('ArticleService', () => {
 
       const result = await articleService.regenerateUserCache(userId)
 
+      expect(articleService.setCachedRecommendations).not.toHaveBeenCalled()
       expect(result.articleIds).toEqual([])
     })
   })
@@ -562,6 +566,30 @@ describe('ArticleService', () => {
     })
   })
 
+  describe('fetchHighlightedArticleIds', () => {
+    const mockHighlightArticleCache = {
+      articleIds: [1, 2, 3],
+      lastUpdated: new Date(),
+    }
+
+    it('should return highlighed article IDs', async () => {
+      ;(redisClient.get as jest.Mock).mockResolvedValue(JSON.stringify(mockHighlightArticleCache))
+
+      const result = await articleService.fetchHighlightedArticleIds()
+
+      expect(result).toEqual([1, 2, 3])
+    })
+
+    it('should update cache when no cache', async () => {
+      ;(redisClient.get as jest.Mock).mockResolvedValue(undefined)
+      jest.spyOn(articleService, 'updateHighlightArticles').mockResolvedValue(mockHighlightArticleCache)
+
+      const result = await articleService.fetchHighlightedArticleIds()
+
+      expect(result).toEqual([1, 2, 3])
+    })
+  })
+
   describe('getRecommendedArticleByCursor', () => {
     it('should return getArticlesByCursor with correct parameters', async () => {
       const userId = 1
@@ -621,6 +649,27 @@ describe('ArticleService', () => {
       const result = await articleService.getLikedArticlesByCursor(userId, limit, cursor)
 
       expect(articleService.fetchLikedArticleIds).toHaveBeenCalledWith(userId)
+      expect(articleService.getArticlesByCursor).toHaveBeenCalledWith(mockArticleIds, userId, limit, cursor)
+    })
+  })
+
+  describe('getHighlightArticlesByCursor', () => {
+    it('should return getArticlesByCursor with correct parameters', async () => {
+      const userId = 1
+      const limit = 10
+      const cursor = 'test-cursor'
+      const mockArticleIds = [1, 2, 3]
+
+      jest.spyOn(articleService, 'fetchHighlightedArticleIds').mockResolvedValue(mockArticleIds)
+      jest.spyOn(articleService, 'getArticlesByCursor').mockResolvedValue({
+        data: [],
+        hasNext: false,
+        nextCursor: 'next-cursor',
+      })
+
+      const result = await articleService.getHighlightArticlesByCursor(userId, limit, cursor)
+
+      expect(articleService.fetchHighlightedArticleIds).toHaveBeenCalled()
       expect(articleService.getArticlesByCursor).toHaveBeenCalledWith(mockArticleIds, userId, limit, cursor)
     })
   })
@@ -824,6 +873,129 @@ describe('ArticleService', () => {
       prismaMock.scrap.deleteMany.mockRejectedValue(error)
 
       await expect(articleService.unscrapArticle(userId, articleId)).rejects.toThrow('Database connection failed')
+    })
+  })
+
+  describe('updateHighlightArticles', () => {
+    const fixedDate = new Date('2025-08-14T00:00:00.000Z')
+
+    beforeAll(() => {
+      jest.useFakeTimers()
+      jest.setSystemTime(fixedDate)
+    })
+
+    afterAll(() => {
+      jest.useRealTimers()
+    })
+
+    const articles = [
+      {
+        id: 1,
+        title: 'Highlight Article 1',
+        likes: [{ user_id: 1 }],
+        scraps: [{ user_id: 1 }],
+        ArticleViewEvent: [{ user_id: 1 }],
+        articles: [{ provider: { id: 1 } }],
+      },
+      {
+        id: 2,
+        title: 'Highlight Article 2',
+        likes: [{ user_id: 1 }, { user_id: 2 }],
+        scraps: [{ user_id: 1 }, { user_id: 2 }],
+        ArticleViewEvent: [{ user_id: 1 }, { user_id: 2 }],
+        articles: [{ provider: { id: 1 } }, { provider: { id: 2 } }],
+      },
+      {
+        id: 3,
+        title: 'Highlight Article 3',
+        likes: [],
+        scraps: [],
+        ArticleViewEvent: [],
+        articles: [{ provider: { id: 1 } }],
+      },
+    ]
+
+    it('Successfully updates highlight articles for a given date', async () => {
+      const fromDate = new Date('2025-08-14T00:00:00Z')
+      const numArticles = 2
+      ;(prismaMock.processedArticle.findMany as jest.Mock).mockResolvedValue(articles)
+      ;(redisClient.setEx as jest.Mock).mockResolvedValue('OK')
+
+      const result = await articleService.updateHighlightArticles(fromDate, numArticles)
+
+      expect(prismaMock.processedArticle.findMany).toHaveBeenCalledWith({
+        include: {
+          likes: true,
+          scraps: true,
+          ArticleViewEvent: true,
+          articles: { select: { provider: true } },
+        },
+        where: { created_at: { gte: fromDate.toISOString() } },
+      })
+
+      expect(result.articleIds).toEqual([2, 1])
+      expect(result.lastUpdated).toEqual(fixedDate)
+
+      expect(redisClient.setEx).toHaveBeenCalledWith(
+        'highlight-articles',
+        3600 * 24, // 24시간
+        JSON.stringify({
+          articleIds: [2, 1], // 기사 2(20점), 기사 1(12점) 순
+          lastUpdated: fixedDate.toISOString(),
+        }),
+      )
+    })
+
+    it('Should use default number of articles if not provided', async () => {
+      const fromDate = new Date('2025-08-13T00:00:00Z')
+      ;(prismaMock.processedArticle.findMany as jest.Mock).mockResolvedValue(articles)
+      ;(redisClient.setEx as jest.Mock).mockResolvedValue('OK')
+
+      const result = await articleService.updateHighlightArticles(fromDate)
+
+      expect(prismaMock.processedArticle.findMany).toHaveBeenCalledWith({
+        include: {
+          likes: true,
+          scraps: true,
+          ArticleViewEvent: true,
+          articles: { select: { provider: true } },
+        },
+        where: { created_at: { gte: fromDate.toISOString() } },
+      })
+
+      expect(result.articleIds).toEqual([2, 1, 3])
+      expect(result.lastUpdated).toEqual(fixedDate)
+
+      expect(redisClient.setEx).toHaveBeenCalledWith(
+        'highlight-articles',
+        3600 * 24,
+        JSON.stringify({
+          articleIds: [2, 1, 3], // 점수순: 기사2(20점), 기사1(12점), 기사3(2점)
+          lastUpdated: fixedDate.toISOString(),
+        }),
+      )
+    })
+
+    it('Should not cache if no articles found', async () => {
+      const fromDate = new Date('2025-08-13T00:00:00Z')
+      ;(prismaMock.processedArticle.findMany as jest.Mock).mockResolvedValue([])
+      ;(redisClient.setEx as jest.Mock).mockResolvedValue('OK')
+
+      const result = await articleService.updateHighlightArticles(fromDate)
+
+      expect(prismaMock.processedArticle.findMany).toHaveBeenCalledWith({
+        include: {
+          likes: true,
+          scraps: true,
+          ArticleViewEvent: true,
+          articles: { select: { provider: true } },
+        },
+        where: { created_at: { gte: fromDate.toISOString() } },
+      })
+
+      expect(result.articleIds).toEqual([])
+      expect(result.lastUpdated).toEqual(fixedDate)
+      expect(redisClient.setEx).not.toHaveBeenCalled()
     })
   })
 })

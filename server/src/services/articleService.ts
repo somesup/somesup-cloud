@@ -1,12 +1,19 @@
 import { ArticleViewEventType, ProcessedArticle } from '@prisma/client'
 import { prisma } from '../../prisma/prisma'
-import { ArticleSimilarityRow, DetailedProcessedArticle, UserArticleCache } from '../types/article'
+import {
+  ArticleSimilarityRow,
+  DetailedProcessedArticle,
+  HighlightArticleCache,
+  UserArticleCache,
+} from '../types/article'
 import { redisClient } from '../config/redis'
 import { createCursor, decodeCursor } from '../utils/cursor'
 import dayjs from 'dayjs'
 import { bigqueryClient } from '../config/bigquery'
 
 const RECOMMENDATION_CACHE_EXPIRATION = 3600 * 6 // 6시간
+const HIGHLIGHT_CACHE_KEY = 'highlight-articles' // Redis에서 하이라이트 기사를 저장할 키
+const HIGHLIGHT_CACHE_EXPIRATION = 3600 * 24 // 24 시간
 
 /**
  * 커서 페이지네이션을 사용하여 기사를 조회하는 결과 형식입니다.
@@ -76,6 +83,10 @@ export const articleService = {
    *  calculateSimilarityAndSort(1, [101, 102, 103])
    */
   calculateSimilarityAndSort: async (userId: number, candidateArticleIds: number[]): Promise<number[]> => {
+    if (candidateArticleIds.length === 0) {
+      return []
+    }
+
     const query = `
       WITH user_embedding AS (
         SELECT embedding_vector
@@ -145,7 +156,10 @@ export const articleService = {
       lastUpdated: new Date(),
     }
 
-    await articleService.setCachedRecommendations(userId, newCache)
+    if (newCache.articleIds.length > 0) {
+      await articleService.setCachedRecommendations(userId, newCache)
+    }
+
     return newCache
   },
 
@@ -228,6 +242,25 @@ export const articleService = {
   },
 
   /**
+   * 하이라이트 기사 ID를 조회합니다.
+   * Redis에 캐싱 데이터가 있는지 먼저 확인하고, 없는 경우 캐시를 업데이트합니다.
+   * @return Promise<number[]> - 하이라이트 기사 ID 배열
+   */
+  fetchHighlightedArticleIds: async (): Promise<number[]> => {
+    const cached = await redisClient.get(HIGHLIGHT_CACHE_KEY)
+
+    if (cached) {
+      const data = JSON.parse(cached) as HighlightArticleCache
+      return data.articleIds
+    }
+
+    // 캐시가 없으면 하이라이트 기사를 업데이트합니다.
+    const yesterday = dayjs().subtract(1, 'day').startOf('day').toDate()
+    const highlightArticles: HighlightArticleCache = await articleService.updateHighlightArticles(yesterday)
+    return highlightArticles.articleIds
+  },
+
+  /**
    * 추천된 기사들을 커서 페이지네이션으로 조회합니다.
    * 이 함수는 사용자의 추천 기사 ID를 가져와 커서와 한계에 따라 결과를 반환합니다.
    * @param userId - 추천 기사를 조회할 사용자의 ID
@@ -284,6 +317,23 @@ export const articleService = {
     cursor?: string,
   ): Promise<ArticleCursorPaginationResult> => {
     const articleIds = await articleService.fetchLikedArticleIds(userId)
+    return articleService.getArticlesByCursor(articleIds, userId, limit, cursor)
+  },
+
+  /**
+   * 하이라이트 기사들을 커서 페이지네이션으로 조회합니다.
+   * 이 함수는 하이라이트 기사 ID를 가져와 커서와 한계에 따라 결과를 반환합니다.
+   * @param userId - 요청 사용자 ID
+   * @param limit - 한 번에 조회할 기사 수
+   * @param cursor - 다음 페이지를 조회하기 위한 커서 (Optional)
+   * @return Promise<ArticleCursorPaginationResult> - 커서 페이지네이션 결과
+   */
+  getHighlightArticlesByCursor: async (
+    userId: number,
+    limit: number,
+    cursor?: string,
+  ): Promise<ArticleCursorPaginationResult> => {
+    const articleIds = await articleService.fetchHighlightedArticleIds()
     return articleService.getArticlesByCursor(articleIds, userId, limit, cursor)
   },
 
@@ -554,5 +604,55 @@ export const articleService = {
         p_article_id: articleId,
       },
     })
+  },
+
+  /**
+   * 하이라이트 기사를 업데이트합니다.
+   * 이 함수는 최근 생성된 기사들을 분석하여 하이라이트 기사를 결정하고 Redis에 캐싱합니다.
+   * @param fromDate - 하이라이트 뉴스가 될 후보 뉴스의 시작 날짜
+   * @param numArticles - 업데이트할 하이라이트 기사 수 (기본값: 15)
+   * @return Promise<void> - 하이라이트 기사 업데이트가 완료되면 반환되는 프로미스
+   * @example
+   * // 최근 7일 이내의 기사를 기준으로 하이라이트 기사 업데이트
+   * updateHighlightArticles(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
+   */
+  updateHighlightArticles: async (fromDate: Date, numArticles: number = 15): Promise<HighlightArticleCache> => {
+    const articles = await prisma.processedArticle.findMany({
+      include: {
+        likes: true,
+        scraps: true,
+        ArticleViewEvent: true,
+        articles: { select: { provider: true } },
+      },
+      where: { created_at: { gte: fromDate.toISOString() } },
+    })
+
+    // 기사의 점수를 계산합니다.
+    // 스크랩 수 * 5 + 좋아요 수 * 3 + 상세 조회 수 * 2 + 제공자 수 * 2
+    const articleScores = articles.map((article) => {
+      const scrapScore = article.scraps.length * 5
+      const likeScore = article.likes.length * 3
+      const detailViewScore = article.ArticleViewEvent.length * 2
+
+      const providerCount = new Set(article.articles.map((a) => a.provider.id)).size
+      const providerCountScore = providerCount * 2
+
+      return {
+        ...article,
+        score: scrapScore + likeScore + detailViewScore + providerCountScore,
+      }
+    })
+
+    const topArticles = articleScores.sort((a, b) => b.score - a.score).slice(0, numArticles)
+    const highlightArticleCache: HighlightArticleCache = {
+      articleIds: topArticles.map((a) => a.id),
+      lastUpdated: dayjs().toDate(),
+    }
+
+    if (highlightArticleCache.articleIds.length > 0) {
+      redisClient.setEx(HIGHLIGHT_CACHE_KEY, HIGHLIGHT_CACHE_EXPIRATION, JSON.stringify(highlightArticleCache))
+    }
+
+    return highlightArticleCache
   },
 }

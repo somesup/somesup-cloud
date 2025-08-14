@@ -9,6 +9,14 @@ export interface UserArticleCache {
 }
 
 /**
+ * 하이라이트 기사 캐싱을 위한 인터페이스입니다.
+ */
+export interface HighlightArticleCache {
+  articleIds: number[]
+  lastUpdated: Date
+}
+
+/**
  * BigQuery에서 반환되는 기사 유사도 결과 인터페이스입니다.
  */
 export interface ArticleSimilarityRow {

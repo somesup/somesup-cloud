@@ -12,6 +12,7 @@ import articleRouter from './src/routes/article'
 import authRouter from './src/routes/auth'
 import userRouter from './src/routes/user'
 import sectionRouter from './src/routes/section'
+import { registerCronJobs } from './src/utils/cron'
 
 const swaggerYamlPath = path.join(__dirname, './build/swagger.yaml')
 const swaggerDocument = YAML.load(swaggerYamlPath)
@@ -20,12 +21,14 @@ redisClient.connect()
 
 const app = Express()
 app.use(Express.json())
-
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument))
 app.use('/api/articles', articleRouter)
 app.use('/api/auth', authRouter)
 app.use('/api/users', userRouter)
 app.use('/api/sections', sectionRouter)
+
+// Cron Jobs 등록
+registerCronJobs()
 
 const PORT = process.env.PORT || 3000
 
