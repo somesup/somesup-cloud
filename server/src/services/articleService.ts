@@ -83,6 +83,10 @@ export const articleService = {
    *  calculateSimilarityAndSort(1, [101, 102, 103])
    */
   calculateSimilarityAndSort: async (userId: number, candidateArticleIds: number[]): Promise<number[]> => {
+    if (candidateArticleIds.length === 0) {
+      return []
+    }
+
     const query = `
       WITH user_embedding AS (
         SELECT embedding_vector
@@ -152,7 +156,10 @@ export const articleService = {
       lastUpdated: new Date(),
     }
 
-    await articleService.setCachedRecommendations(userId, newCache)
+    if (newCache.articleIds.length > 0) {
+      await articleService.setCachedRecommendations(userId, newCache)
+    }
+
     return newCache
   },
 
@@ -642,7 +649,9 @@ export const articleService = {
       lastUpdated: dayjs().toDate(),
     }
 
-    redisClient.setEx(HIGHLIGHT_CACHE_KEY, HIGHLIGHT_CACHE_EXPIRATION, JSON.stringify(highlightArticleCache))
+    if (highlightArticleCache.articleIds.length > 0) {
+      redisClient.setEx(HIGHLIGHT_CACHE_KEY, HIGHLIGHT_CACHE_EXPIRATION, JSON.stringify(highlightArticleCache))
+    }
 
     return highlightArticleCache
   },

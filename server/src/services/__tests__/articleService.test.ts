@@ -309,6 +309,7 @@ describe('ArticleService', () => {
 
       const result = await articleService.regenerateUserCache(userId)
 
+      expect(articleService.setCachedRecommendations).not.toHaveBeenCalled()
       expect(result.articleIds).toEqual([])
     })
   })
@@ -973,6 +974,28 @@ describe('ArticleService', () => {
           lastUpdated: fixedDate.toISOString(),
         }),
       )
+    })
+
+    it('Should not cache if no articles found', async () => {
+      const fromDate = new Date('2025-08-13T00:00:00Z')
+      ;(prismaMock.processedArticle.findMany as jest.Mock).mockResolvedValue([])
+      ;(redisClient.setEx as jest.Mock).mockResolvedValue('OK')
+
+      const result = await articleService.updateHighlightArticles(fromDate)
+
+      expect(prismaMock.processedArticle.findMany).toHaveBeenCalledWith({
+        include: {
+          likes: true,
+          scraps: true,
+          ArticleViewEvent: true,
+          articles: { select: { provider: true } },
+        },
+        where: { created_at: { gte: fromDate.toISOString() } },
+      })
+
+      expect(result.articleIds).toEqual([])
+      expect(result.lastUpdated).toEqual(fixedDate)
+      expect(redisClient.setEx).not.toHaveBeenCalled()
     })
   })
 })
