@@ -226,7 +226,7 @@ class DatabaseClient:
 
     def _get_keyword_id(self, connection: pymysql.connections.Connection, keyword: str) -> Optional[int]:
         """Get the ID of a keyword, or insert it if it doesn't exist."""
-        with connection.cursor() as cursor:
+        with connection.cursor(pymysql.cursors.DictCursor) as cursor:
             cursor.execute(
                 "SELECT id FROM keyword WHERE keyword = %s", (keyword,))
             row = cursor.fetchone()
