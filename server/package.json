@@ -6,9 +6,12 @@
   "scripts": {
     "predev": "pnpm run api-docs",
     "dev": "nodemon main.ts",
+    "start": "node dist/main.js",
     "test": "jest",
-    "init_db": "npx prisma migrate deploy && npx prisma generate && npx ts-node ./prisma/seed.ts",
-    "api-docs": "swagger-cli bundle ./src/swagger/openapi.yaml --outfile build/swagger.yaml --type yaml"
+    "db:generate": "npx prisma generate",
+    "db:migrate": "npx prisma migrate deploy",
+    "api-docs": "swagger-cli bundle ./src/swagger/openapi.yaml --outfile build/swagger.yaml --type yaml",
+    "build": "tsc"
   },
   "dependencies": {
     "@google-cloud/bigquery": "^8.1.1",
