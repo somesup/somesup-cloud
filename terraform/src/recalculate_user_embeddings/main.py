@@ -32,8 +32,7 @@ class Config:
     RECOMMENDATION_DATASET = os.getenv("RECOMMENDATION_DATASET", "")
     P_ARTICLE_EMBEDDING_TABLE = os.getenv("P_ARTICLE_EMBEDDING_TABLE", "")
     USER_EMBEDDING_TABLE = os.getenv("USER_EMBEDDING_TABLE", "")
-    SECTION_AVG_EMBEDDINGS_TABLE = os.getenv("SECTION_AVG_EMBEDDINGS_TABLE",
-                                             "")
+    SECTION_AVG_EMBEDDINGS_TABLE = os.getenv("SECTION_AVG_EMBEDDINGS_TABLE", "")
 
     # Action weights
     LIKE_WEIGHT = 3
@@ -217,7 +216,7 @@ class DatabaseClient:
         user_section_preferences: dict[int, float] = {}
         with self.get_connection() as conn:
             with conn.cursor(pymysql.cursors.DictCursor) as cursor:
-                cursor.execute(query, (user_id, ))
+                cursor.execute(query, (user_id,))
                 rows = cursor.fetchall()
 
         for row in rows:
@@ -226,8 +225,7 @@ class DatabaseClient:
             user_section_preferences[sid] = pref
         return user_section_preferences
 
-    def get_article_sections_batch(self,
-                                   article_ids: list[int]) -> dict[int, int]:
+    def get_article_sections_batch(self, article_ids: list[int]) -> dict[int, int]:
         """Fetch section_id for each article in a single IN-clause query.
 
         Args:
@@ -284,7 +282,8 @@ class BigQueryClient:
         self._bq_client = bigquery.Client(project=self._project)
 
     def get_p_article_embeddings_batch(
-            self, article_ids: list[int]) -> dict[int, list[float]]:
+        self, article_ids: list[int]
+    ) -> dict[int, list[float]]:
         """Fetch embeddings for given article IDs.
 
         Args:
@@ -301,9 +300,11 @@ class BigQueryClient:
         FROM `{self._project}.{self._recommendation_dataset}.{self._p_article_embedding_table}`
         WHERE p_article_id IN UNNEST(@article_ids)
         """
-        job_config = bigquery.QueryJobConfig(query_parameters=[
-            bigquery.ArrayQueryParameter("article_ids", "INT64", article_ids)
-        ])
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ArrayQueryParameter("article_ids", "INT64", article_ids)
+            ]
+        )
         results = self._bq_client.query(query, job_config=job_config).result()
 
         embeddings: dict[int, list[float]] = {}
@@ -329,8 +330,9 @@ class BigQueryClient:
 
         return section_means
 
-    def upsert_user_embedding(self, user_id: int,
-                              embedding_vector: list[float]) -> None:
+    def upsert_user_embedding(
+        self, user_id: int, embedding_vector: list[float]
+    ) -> None:
         """Upsert a single user embedding.
 
         Args:
@@ -357,11 +359,14 @@ class BigQueryClient:
           INSERT (user_id, embedding_vector) VALUES (S.user_id, S.embedding_vector)
         """
 
-        job_config = bigquery.QueryJobConfig(query_parameters=[
-            bigquery.ScalarQueryParameter("user_id", "INT64", user_id),
-            bigquery.ScalarQueryParameter("embedding_json", "STRING",
-                                          embedding_json),
-        ])
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("user_id", "INT64", user_id),
+                bigquery.ScalarQueryParameter(
+                    "embedding_json", "STRING", embedding_json
+                ),
+            ]
+        )
         self._bq_client.query(query, job_config=job_config).result()
 
 
@@ -373,10 +378,9 @@ class UserEmbeddingGenerator:
         self.db_client = db_client
         self.bq_client = bq_client
 
-    def generate_user_embedding(self,
-                                user_id: int,
-                                start_date: Optional[datetime.date] = None
-                                ) -> Optional[list[float]]:
+    def generate_user_embedding(
+        self, user_id: int, start_date: Optional[datetime.date] = None
+    ) -> Optional[list[float]]:
         """Generate embedding for a specific user.
 
         Strategy:
@@ -396,8 +400,7 @@ class UserEmbeddingGenerator:
         # Step 1: Fetch user interactions
         likes = self.db_client.get_user_recent_likes(user_id, start_date)
         scraps = self.db_client.get_user_recent_scraps(user_id, start_date)
-        detail_views = self.db_client.get_user_recent_detail_views(
-            user_id, start_date)
+        detail_views = self.db_client.get_user_recent_detail_views(user_id, start_date)
 
         # Collect all interacted article IDs
         interacted_article_ids: set[int] = set()
@@ -407,16 +410,17 @@ class UserEmbeddingGenerator:
         interacted_article_ids_list = list(interacted_article_ids)
 
         # Step 2: Fetch user section preferences
-        user_section_preferences = self.db_client.get_user_section_preferences(
-            user_id)
+        user_section_preferences = self.db_client.get_user_section_preferences(user_id)
 
         # Step 3: Try interaction-based embedding first
         if interacted_article_ids_list:
             # Fetch article embeddings and sections for interacted articles
             article_embeddings = self.bq_client.get_p_article_embeddings_batch(
-                interacted_article_ids_list)
+                interacted_article_ids_list
+            )
             article_sections = self.db_client.get_article_sections_batch(
-                interacted_article_ids_list)
+                interacted_article_ids_list
+            )
 
             emb = self._compute_user_embedding(
                 likes,
@@ -431,20 +435,21 @@ class UserEmbeddingGenerator:
 
         # Step 4: Fallback to section-preference based embedding
         section_means = self.bq_client.get_section_avg_embeddings()
-        cold_emb = self._section_preference_embedding(user_section_preferences,
-                                                      section_means)
+        cold_emb = self._section_preference_embedding(
+            user_section_preferences, section_means
+        )
 
         if cold_emb is None:
             # Final fallback: global mean from section means
             if section_means:
-                global_mean_embedding = np.mean(np.array(
-                    list(section_means.values())),
-                                                axis=0).tolist()
+                global_mean_embedding = np.mean(
+                    np.array(list(section_means.values())), axis=0
+                ).tolist()
                 return self._postprocess(global_mean_embedding)
             else:
                 logger.warning(
-                    "No section means found and no interactions for user %d",
-                    user_id)
+                    "No section means found and no interactions for user %d", user_id
+                )
                 return None
 
         return self._postprocess(cold_emb)
@@ -500,8 +505,10 @@ class UserEmbeddingGenerator:
         return user_embedding.tolist()
 
     def _section_preference_embedding(
-            self, user_section_preferences: dict[int, float],
-            section_means: dict[int, list[float]]) -> Optional[list[float]]:
+        self,
+        user_section_preferences: dict[int, float],
+        section_means: dict[int, list[float]],
+    ) -> Optional[list[float]]:
         """Compute section-preference weighted embedding for cold-start users.
 
         Args:
@@ -573,7 +580,7 @@ def main(request):
         logger.error("Configuration validation error: %s", e)
         return {
             "status": "error",
-            "message": f"Configuration validation error: {e}"
+            "message": f"Configuration validation error: {e}",
         }, 500
 
     # Parse request body
@@ -582,7 +589,7 @@ def main(request):
         if not request_json or "userId" not in request_json:
             return {
                 "status": "error",
-                "message": "Request body must contain 'userId' field"
+                "message": "Request body must contain 'userId' field",
             }, 400
 
         user_id = int(request_json["userId"])
@@ -622,18 +629,13 @@ def main(request):
         bq_client.upsert_user_embedding(user_id, user_embedding)
 
         return {
-            "status":
-            "success",
-            "userId":
-            user_id,
-            "message":
-            f"Successfully recalculated and saved embedding for user {user_id}",
+            "status": "success",
+            "userId": user_id,
+            "message": f"Successfully recalculated and saved embedding for user {user_id}",
         }, 200
 
     except Exception as e:
-        logger.error("Error in user embedding recalculation: %s",
-                     str(e),
-                     exc_info=True)
+        logger.error("Error in user embedding recalculation: %s", str(e), exc_info=True)
         return {
             "status": "error",
             "message": f"Failed to recalculate user embedding: {str(e)}",

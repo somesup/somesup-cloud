@@ -1,5 +1,5 @@
 locals {
-  NUM_ARTICLES_PER_SOURCE = 10
+  NUM_ARTICLES_PER_SOURCE = 50
 }
 
 resource "google_cloud_tasks_queue" "summary_queue" {

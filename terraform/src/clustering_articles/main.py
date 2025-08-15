@@ -22,18 +22,19 @@ logger = logging.getLogger(__name__)
 
 class Config:
     """Configuration for the application."""
-    PROJECT_ID = os.getenv('PROJECT_ID', '')
-    LOCATION = os.getenv('LOCATION', 'us-west1')
 
-    INSTANCE_CONNECTION_NAME = os.getenv("INSTANCE_CONNECTION_NAME", '')
-    MYSQL_USERNAME = os.getenv('MYSQL_FETCHER_USERNAME', '')
-    MYSQL_PASSWORD = os.getenv('MYSQL_FETCHER_PASSWORD', '')
-    MYSQL_DATABASE = 'somesup'
+    PROJECT_ID = os.getenv("PROJECT_ID", "")
+    LOCATION = os.getenv("LOCATION", "us-west1")
 
-    SIMILARITY_THRESHOLD = float(os.getenv('SIMILARITY_THRESHOLD', '0.9'))
+    INSTANCE_CONNECTION_NAME = os.getenv("INSTANCE_CONNECTION_NAME", "")
+    MYSQL_USERNAME = os.getenv("MYSQL_FETCHER_USERNAME", "")
+    MYSQL_PASSWORD = os.getenv("MYSQL_FETCHER_PASSWORD", "")
+    MYSQL_DATABASE = "somesup"
 
-    MAX_BATCH_SIZE = int(os.getenv('MAX_BATCH_SIZE', '20'))
-    MAX_CONTENT_LENGTH = int(os.getenv('MAX_CONTENT_LENGTH', '2000'))
+    SIMILARITY_THRESHOLD = float(os.getenv("SIMILARITY_THRESHOLD", "0.9"))
+
+    MAX_BATCH_SIZE = int(os.getenv("MAX_BATCH_SIZE", "20"))
+    MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", "2000"))
 
     def validate(self):
         """Validate the configuration.
@@ -61,13 +62,14 @@ class SimpleArticle:
         content (str): The content of the article.
         embedding_vector (list[float] | None): The embedding vector for the article, if available.
     """
+
     id: int
     title: str
     content: str
     embedding_vector: list[float] | None
 
     @classmethod
-    def from_api_response(cls, article: dict[str, Any]) -> 'SimpleArticle':
+    def from_api_response(cls, article: dict[str, Any]) -> "SimpleArticle":
         """Create a SimpleArticle instance from an API response.
 
         Args:
@@ -76,9 +78,9 @@ class SimpleArticle:
             An instance of SimpleArticle populated with the article data.
         """
         return cls(
-            id=article.get('id', 0),
-            title=article.get('title', ''),
-            content=article.get('content', ''),
+            id=article.get("id", 0),
+            title=article.get("title", ""),
+            content=article.get("content", ""),
             embedding_vector=None,
         )
 
@@ -118,7 +120,7 @@ class DatabaseClient:
         try:
             connection = self._connector.connect(
                 self._instance_name,
-                'pymysql',
+                "pymysql",
                 user=self._username,
                 password=self._password,
                 db=self._database,
@@ -145,9 +147,7 @@ class DatabaseClient:
                     "SELECT id, title, content FROM article WHERE is_processed = FALSE"
                 )
                 rows = cursor.fetchall()
-                articles = [
-                    SimpleArticle.from_api_response(row) for row in rows
-                ]
+                articles = [SimpleArticle.from_api_response(row) for row in rows]
                 return articles
 
 
@@ -189,30 +189,32 @@ class GeminiClient:
         """
         # 제목과 내용을 결합하되, 전체 길이가 max_content_length를 초과하지 않도록 함
         title = article.title
-        available_content_length = self._max_content_length - len(
-            title) - 2  # 2 for "\n\n"
+        available_content_length = (
+            self._max_content_length - len(title) - 2
+        )  # 2 for "\n\n"
 
         if available_content_length > 0:
             content = article.content[:available_content_length]
             return f"{title}\n\n{content}"
         else:
             # 제목이 너무 길면 제목만 자르기
-            return title[:self._max_content_length]
+            return title[: self._max_content_length]
 
     def _estimate_token_count(self, content: str) -> int:
         """Estimate token count for content.
-        
+
         Simple heuristic: 1 token ≈ 4 characters for Korean/English mixed content.
         """
         return len(content) // 4
 
     def _create_smart_batches(
-            self, articles: list[SimpleArticle]) -> list[list[SimpleArticle]]:
+        self, articles: list[SimpleArticle]
+    ) -> list[list[SimpleArticle]]:
         """Create batches of articles that respect token limits.
-        
+
         Args:
             articles: List of articles to batch.
-            
+
         Returns:
             List of article batches.
         """
@@ -226,8 +228,10 @@ class GeminiClient:
             estimated_tokens = self._estimate_token_count(content)
 
             # 현재 배치에 추가했을 때 토큰 한계를 초과하거나 배치 크기 한계를 초과하는 경우
-            if (current_token_count + estimated_tokens > max_tokens_per_batch
-                    or len(current_batch) >= self._max_batch_size):
+            if (
+                current_token_count + estimated_tokens > max_tokens_per_batch
+                or len(current_batch) >= self._max_batch_size
+            ):
 
                 if current_batch:  # 현재 배치가 비어있지 않으면 저장
                     batches.append(current_batch)
@@ -265,23 +269,21 @@ class GeminiClient:
 
         # 배치 크기와 토큰 수 로깅
         total_tokens = sum(
-            self._estimate_token_count(content)
-            for content in article_contents)
+            self._estimate_token_count(content) for content in article_contents
+        )
 
         try:
             result = self._client.models.embed_content(
                 contents=article_contents,
-                model='text-embedding-004',
-                config=google.genai.types.EmbedContentConfig(
-                    output_dimensionality=768),
+                model="text-embedding-004",
+                config=google.genai.types.EmbedContentConfig(output_dimensionality=768),
             )
             return result.embeddings
         except Exception as e:
             logger.error(f"Error getting embeddings for batch: {e}")
             # 배치가 여전히 너무 크면 개별적으로 처리
             if "token count" in str(e) and len(articles) > 1:
-                logger.info(
-                    "Batch too large, processing articles individually")
+                logger.info("Batch too large, processing articles individually")
                 return self._get_embeddings_individually(articles)
             raise
 
@@ -303,25 +305,26 @@ class GeminiClient:
                 content = self._truncate_embed_contents(article)
                 result = self._client.models.embed_content(
                     contents=[content],
-                    model='text-embedding-004',
+                    model="text-embedding-004",
                     config=google.genai.types.EmbedContentConfig(
-                        output_dimensionality=768),
+                        output_dimensionality=768
+                    ),
                 )
                 if result.embeddings:
                     embeddings.append(result.embeddings[0])
                 else:
-                    logger.warning(
-                        f"No embedding returned for article {article.id}")
+                    logger.warning(f"No embedding returned for article {article.id}")
                     # 빈 임베딩 벡터 생성 (768차원)
                     dummy_embedding = google.genai.types.ContentEmbedding(
-                        values=[0.0] * 768)
+                        values=[0.0] * 768
+                    )
                     embeddings.append(dummy_embedding)
             except Exception as e:
-                logger.error(
-                    f"Error getting embedding for article {article.id}: {e}")
+                logger.error(f"Error getting embedding for article {article.id}: {e}")
                 # 오류 발생 시 더미 임베딩 추가
                 dummy_embedding = google.genai.types.ContentEmbedding(
-                    values=[0.0] * 768)
+                    values=[0.0] * 768
+                )
                 embeddings.append(dummy_embedding)
 
         return embeddings
@@ -366,13 +369,10 @@ class GeminiClient:
                         article.embedding_vector = embedding.values
                         article_index += 1
                 else:
-                    logger.warning(
-                        f"Mismatch in embedding count for batch {batch_idx}")
+                    logger.warning(f"Mismatch in embedding count for batch {batch_idx}")
                     # 개별 처리로 fallback
-                    individual_embeddings = self._get_embeddings_individually(
-                        batch)
-                    for article, embedding in zip(batch,
-                                                  individual_embeddings):
+                    individual_embeddings = self._get_embeddings_individually(batch)
+                    for article, embedding in zip(batch, individual_embeddings):
                         article.embedding_vector = embedding.values
                         article_index += 1
             except Exception as e:
@@ -382,8 +382,7 @@ class GeminiClient:
                     article.embedding_vector = [0.0] * 768
                     article_index += 1
 
-        logger.info(
-            f"Completed embedding processing for {article_index} articles")
+        logger.info(f"Completed embedding processing for {article_index} articles")
 
 
 class ClusterClient:
@@ -414,15 +413,16 @@ class ClusterClient:
             return []
 
         valid_articles = [
-            article for article in articles if article.embedding_vector
+            article
+            for article in articles
+            if article.embedding_vector
             and sum(article.embedding_vector) != 0  # 더미 임베딩 제외
         ]
         if not valid_articles:
             logger.info("No valid articles with embeddings to cluster.")
             return []
 
-        vectors = np.array(
-            [article.embedding_vector for article in valid_articles])
+        vectors = np.array([article.embedding_vector for article in valid_articles])
 
         similarity_matrix = sklearn.metrics.pairwise.cosine_similarity(vectors)
 
@@ -435,8 +435,7 @@ class ClusterClient:
 
             similar_indices = []
             for j in range(len(valid_articles)):
-                if j != i and similarity_matrix[i][
-                        j] >= self._similarity_threshold:
+                if j != i and similarity_matrix[i][j] >= self._similarity_threshold:
                     similar_indices.append(j)
 
             if similar_indices:
@@ -477,8 +476,7 @@ def main(request):
         max_batch_size=config.MAX_BATCH_SIZE,
     )
 
-    cluster_client = ClusterClient(
-        similarity_threshold=config.SIMILARITY_THRESHOLD)
+    cluster_client = ClusterClient(similarity_threshold=config.SIMILARITY_THRESHOLD)
 
     # Fetch unprocessed articles from the database
     unprocessed_articles = db_client.get_unprocessed_articles()
@@ -499,6 +497,5 @@ def main(request):
         "status": "success",
         "total_articles": len(unprocessed_articles),
         "total_clusters": len(clusters),
-        "clusters":
-        [[article.id for article in cluster] for cluster in clusters]
+        "clusters": [[article.id for article in cluster] for cluster in clusters],
     }, 200
