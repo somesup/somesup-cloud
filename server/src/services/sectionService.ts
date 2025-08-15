@@ -129,7 +129,23 @@ export const sectionService = {
       }
     })
 
-    return sectionScores.map((score) => ({
+    const rawBehaviorScores = sectionScores.map((s) => s.behaviorScore)
+    const minBehaviorScores = Math.min(...rawBehaviorScores)
+    const maxBehaviorScores = Math.max(...rawBehaviorScores)
+
+    // 행동 점수를 1에서 3 사이로 정규화
+    const normalizedScores = sectionScores.map((s) => {
+      let normalized = 1
+      if (maxBehaviorScores !== minBehaviorScores) {
+        normalized = 1 + ((s.behaviorScore - minBehaviorScores) / (maxBehaviorScores - minBehaviorScores)) * (3 - 1)
+      }
+      return {
+        ...s,
+        behaviorScore: parseFloat(normalized.toFixed(2)),
+      }
+    })
+
+    return normalizedScores.map((score) => ({
       sectionId: score.sectionId,
       sectionName: score.sectionName,
       preference: score.preference,
