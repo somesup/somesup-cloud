@@ -26,10 +26,11 @@ resource "google_cloud_scheduler_job" "daily_article_processing" {
   time_zone = "Asia/Seoul"
 
   http_target {
-    uri         = "https://${var.region}-workflowexecutions.googleapis.com/v1/projects/${var.project}/locations/${var.region}/workflows/${google_workflows_workflow.article_processing.name}:execute"
+    uri         = "https://workflowexecutions.googleapis.com/v1/projects/somesup-462506/locations/asia-northeast3/workflows/article-processing-workflow/executions"
     http_method = "POST"
 
-    oidc_token {
+    oauth_token {
+      scope                 = "https://www.googleapis.com/auth/cloud-platform"
       service_account_email = google_service_account.scheduler.email
     }
   }
