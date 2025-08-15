@@ -38,9 +38,9 @@ class Config:
     PROJECT_ID = os.getenv("PROJECT_ID", "")
     VERTEX_AI_REGION = os.getenv("VERTEX_AI_REGION", "us-west1")
     INSTANCE_CONNECTION_NAME = os.getenv("INSTANCE_CONNECTION_NAME", "")
-    MYSQL_USERNAME = os.getenv('MYSQL_SUMMARIZER_USERNAME', '')
-    MYSQL_PASSWORD = os.getenv('MYSQL_SUMMARIZER_PASSWORD', '')
-    MYSQL_DATABASE = 'somesup'
+    MYSQL_USERNAME = os.getenv("MYSQL_SUMMARIZER_USERNAME", "")
+    MYSQL_PASSWORD = os.getenv("MYSQL_SUMMARIZER_PASSWORD", "")
+    MYSQL_DATABASE = "somesup"
     BQ_EMBEDDING_DATASET = os.getenv("BQ_EMBEDDING_DATASET", "")
     BQ_EMBEDDING_TABLE = os.getenv("BQ_EMBEDDING_TABLE", "")
 
@@ -71,12 +71,14 @@ class SimpleArticle:
     thumbnail_url: str
 
     @classmethod
-    def from_dict(cls, response: dict[str, Any]) -> 'SimpleArticle':
+    def from_dict(cls, response: dict[str, Any]) -> "SimpleArticle":
         """Create a SimpleArticle instance from a database row."""
-        return cls(id=response['id'],
-                   title=response['title'],
-                   content=response['content'],
-                   thumbnail_url=response['thumbnail_url'])
+        return cls(
+            id=response["id"],
+            title=response["title"],
+            content=response["content"],
+            thumbnail_url=response["thumbnail_url"],
+        )
 
 
 @dataclasses.dataclass
@@ -93,16 +95,18 @@ class ProcessedArticle:
     region: Optional[str] = None
 
     @classmethod
-    def from_dict(cls, response: dict[Any, Any]) -> 'ProcessedArticle':
+    def from_dict(cls, response: dict[Any, Any]) -> "ProcessedArticle":
         """Create a ProcessedArticle instance from a database row."""
-        return cls(title=response['title'],
-                   one_line_summary=response['one_line_summary'],
-                   full_summary=response['full_summary'],
-                   language=response['language'],
-                   section_id=response['section_id'],
-                   keywords=response['keywords'],
-                   region=response.get('region'),
-                   thumbnail_url=response['thumbnail_url'])
+        return cls(
+            title=response["title"],
+            one_line_summary=response["one_line_summary"],
+            full_summary=response["full_summary"],
+            language=response["language"],
+            section_id=response["section_id"],
+            keywords=response["keywords"],
+            region=response.get("region"),
+            thumbnail_url=response["thumbnail_url"],
+        )
 
 
 @dataclasses.dataclass
@@ -116,14 +120,14 @@ class AiResponse:
     section_id: int
 
     @classmethod
-    def from_dict(cls, response: Any) -> 'AiResponse':
+    def from_dict(cls, response: Any) -> "AiResponse":
         """Create an AiResponse instance from AI model response."""
         return cls(
-            title=response['title'],
-            one_line_summary=response['one_line_summary'],
-            full_summary=response['full_summary'],
-            keywords=response['keywords'],
-            section_id=response['section_id'],
+            title=response["title"],
+            one_line_summary=response["one_line_summary"],
+            full_summary=response["full_summary"],
+            keywords=response["keywords"],
+            section_id=response["section_id"],
         )
 
 
@@ -184,7 +188,7 @@ class DatabaseClient:
         try:
             connection = self._connector.connect(
                 self._instance_name,
-                'pymysql',
+                "pymysql",
                 user=self._username,
                 password=self._password,
                 db=self._database,
@@ -206,7 +210,7 @@ class DatabaseClient:
         try:
             with self._get_connection() as connection:
                 with connection.cursor(pymysql.cursors.DictCursor) as cursor:
-                    placeholders = ', '.join(['%s'] * len(article_ids))
+                    placeholders = ", ".join(["%s"] * len(article_ids))
                     query = f"""
                         SELECT id, title, content, thumbnail_url
                         FROM article
@@ -216,32 +220,35 @@ class DatabaseClient:
                     rows = cursor.fetchall()
                     articles = [SimpleArticle.from_dict(row) for row in rows]
 
-                    logger.info("Retrieved %d articles from database",
-                                len(articles))
+                    logger.info("Retrieved %d articles from database", len(articles))
                     return articles
 
         except Exception as e:
             logger.error("Error fetching articles: %s", e)
             raise
 
-    def _get_keyword_id(self, connection: pymysql.connections.Connection, keyword: str) -> Optional[int]:
+    def _get_keyword_id(
+        self, connection: pymysql.connections.Connection, keyword: str
+    ) -> Optional[int]:
         """Get the ID of a keyword, or insert it if it doesn't exist."""
         with connection.cursor(pymysql.cursors.DictCursor) as cursor:
-            cursor.execute(
-                "SELECT id FROM keyword WHERE keyword = %s", (keyword,))
+            cursor.execute("SELECT id FROM keyword WHERE keyword = %s", (keyword,))
             row = cursor.fetchone()
             if row:
-                return row['id']
+                return row["id"]
 
-    def _create_keyword(self, connection: pymysql.connections.Connection, keyword: str) -> int:
+    def _create_keyword(
+        self, connection: pymysql.connections.Connection, keyword: str
+    ) -> int:
         """Insert a new keyword and return its ID."""
         with connection.cursor() as cursor:
-            cursor.execute(
-                "INSERT INTO keyword (keyword) VALUES (%s)", (keyword,))
+            cursor.execute("INSERT INTO keyword (keyword) VALUES (%s)", (keyword,))
             connection.commit()
             return cursor.lastrowid
 
-    def _get_or_create_keyword_id(self, connection: pymysql.connections.Connection, keyword: str) -> int:
+    def _get_or_create_keyword_id(
+        self, connection: pymysql.connections.Connection, keyword: str
+    ) -> int:
         """Get the ID of a keyword, or create it if it doesn't exist."""
         keyword_id = self._get_keyword_id(connection, keyword)
         if keyword_id is None:
@@ -249,8 +256,8 @@ class DatabaseClient:
         return keyword_id
 
     def save_processed_article_with_references(
-            self, article: ProcessedArticle,
-            articles: list[SimpleArticle]) -> int:
+        self, article: ProcessedArticle, articles: list[SimpleArticle]
+    ) -> int:
         """Save a processed article and update article references in a single transaction."""
         if not articles:
             raise ValueError("Articles list cannot be empty")
@@ -264,30 +271,35 @@ class DatabaseClient:
                         INSERT INTO processed_article (title, one_line_summary, full_summary, language, region, section_id, thumbnail_url)
                         VALUES (%s, %s, %s, %s, %s, %s, %s)
                     """
-                    cursor.execute(insert_sql, (
-                        article.title,
-                        article.one_line_summary,
-                        article.full_summary,
-                        article.language,
-                        article.region,
-                        article.section_id,
-                        articles[0].thumbnail_url,
-                    ))
+                    cursor.execute(
+                        insert_sql,
+                        (
+                            article.title,
+                            article.one_line_summary,
+                            article.full_summary,
+                            article.language,
+                            article.region,
+                            article.section_id,
+                            articles[0].thumbnail_url,
+                        ),
+                    )
 
                     new_processed_id = cursor.lastrowid
-                    logger.info("Processed article saved with ID: %s",
-                                new_processed_id)
+                    logger.info("Processed article saved with ID: %s", new_processed_id)
 
                     # Insert keywords and create mapping
-                    keyword_ids = [self._get_or_create_keyword_id(connection, keyword)
-                                   for keyword in article.keywords]
+                    keyword_ids = [
+                        self._get_or_create_keyword_id(connection, keyword)
+                        for keyword in article.keywords
+                    ]
                     for keyword_id in keyword_ids:
                         cursor.execute(
                             "INSERT INTO keyword_article_mapping (p_article_id, keyword_id) VALUES (%s, %s)",
-                            (new_processed_id, keyword_id))
+                            (new_processed_id, keyword_id),
+                        )
 
                     # Update article references
-                    placeholders = ', '.join(['%s'] * len(articles))
+                    placeholders = ", ".join(["%s"] * len(articles))
                     update_sql = f"""
                         UPDATE article
                         SET processed_id = %s,
@@ -296,8 +308,7 @@ class DatabaseClient:
                     """
                     cursor.execute(
                         update_sql,
-                        [new_processed_id] +
-                        [article.id for article in articles],
+                        [new_processed_id] + [article.id for article in articles],
                     )
 
                     updated_count = cursor.rowcount
@@ -307,14 +318,15 @@ class DatabaseClient:
                     connection.commit()
                     logger.info(
                         "Transaction completed successfully for processed_id: %s",
-                        new_processed_id)
+                        new_processed_id,
+                    )
 
                     return new_processed_id
 
         except Exception as e:
             logger.error(
-                "Error in transaction (processed article + references update): %s",
-                e)
+                "Error in transaction (processed article + references update): %s", e
+            )
             # Connection will be automatically rolled back when context exits
             raise
 
@@ -372,31 +384,27 @@ class VertexAiClient:
     def _get_response_schema(self) -> dict:
         """Get the JSON schema for AI response validation."""
         return {
-            "type":
-            "object",
+            "type": "object",
             "properties": {
-                "title": {
-                    "type": "string"
-                },
-                "one_line_summary": {
-                    "type": "string"
-                },
-                "full_summary": {
-                    "type": "string"
-                },
+                "title": {"type": "string"},
+                "one_line_summary": {"type": "string"},
+                "full_summary": {"type": "string"},
                 "section_id": {
                     "type": "integer",
                 },
                 "keywords": {
                     "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
+                    "items": {"type": "string"},
                     "maxItems": 3,
-                }
+                },
             },
-            "required":
-            ["title", "one_line_summary", "full_summary", "section_id", "keywords"],
+            "required": [
+                "title",
+                "one_line_summary",
+                "full_summary",
+                "section_id",
+                "keywords",
+            ],
         }
 
     def generate_summary(
@@ -422,13 +430,13 @@ class VertexAiClient:
                 config={
                     "response_mime_type": "application/json",
                     "response_schema": response_schema,
-                })
+                },
+            )
 
             print("Response:", response.parsed)
 
             ai_response = AiResponse.from_dict(response.parsed)
-            logger.info("Successfully generated summary: '%s'",
-                        ai_response.title)
+            logger.info("Successfully generated summary: '%s'", ai_response.title)
 
             return ai_response
 
@@ -443,8 +451,7 @@ class VertexAiClient:
         result = self._client.models.embed_content(
             contents=f"{article.title}\n\n{article.full_summary}",
             model="text-embedding-004",
-            config=google.genai.types.EmbedContentConfig(
-                output_dimensionality=768),
+            config=google.genai.types.EmbedContentConfig(output_dimensionality=768),
         )
 
         return result.embeddings
@@ -478,20 +485,21 @@ class BigQueryClient:
             embedding: The embedding vector to upload.
         """
         if embedding is None or len(embedding) == 0:
-            logging.warning(
-                "Embedding Vector is None. Skipping upload to BigQuery.")
+            logging.warning("Embedding Vector is None. Skipping upload to BigQuery.")
             return
 
         table_id = f"{self._project}.{self._bq_dataset}.{self._bq_table}"
         now = datetime.datetime.now(tz=datetime.timezone.utc)
 
-        rows_to_insert = [{
-            "p_article_id": processed_id,
-            "section_id": section_id,
-            "embedding_vector": embedding[0].values,
-            "created_at": now.isoformat(),
-            "updated_at": now.isoformat(),
-        }]
+        rows_to_insert = [
+            {
+                "p_article_id": processed_id,
+                "section_id": section_id,
+                "embedding_vector": embedding[0].values,
+                "created_at": now.isoformat(),
+                "updated_at": now.isoformat(),
+            }
+        ]
 
         errors = self._bq_client.insert_rows_json(
             table_id,
@@ -499,13 +507,13 @@ class BigQueryClient:
         )
 
         if errors:
-            logger.error("Error inserting embeddings into BigQuery: %s",
-                         errors)
+            logger.error("Error inserting embeddings into BigQuery: %s", errors)
             raise RuntimeError(f"BigQuery insert errors: {errors}")
         else:
             logger.info(
                 "Inserted embedding vector for processed article id %d into BigQuery",
-                processed_id)
+                processed_id,
+            )
 
 
 class ArticleSummarizer:
@@ -532,14 +540,12 @@ class ArticleSummarizer:
             bq_table=config.BQ_EMBEDDING_TABLE,
         )
 
-    def process_articles(
-            self, article_ids: list[int]) -> tuple[ProcessedArticle, int]:
+    def process_articles(self, article_ids: list[int]) -> tuple[ProcessedArticle, int]:
         """Process articles by generating summaries and saving to database."""
         if not article_ids:
             raise ValueError("Article IDs cannot be empty")
 
-        logger.info("Processing %d articles: %s", len(article_ids),
-                    article_ids)
+        logger.info("Processing %d articles: %s", len(article_ids), article_ids)
 
         # Fetch articles from database
         articles = self.db_client.get_articles(article_ids)
@@ -553,7 +559,8 @@ class ArticleSummarizer:
 
         # Determine the best thumbnail URL by resolution
         best_thumbnail_url = self._image_client.get_highest_resolution_image(
-            [article.thumbnail_url for article in articles])
+            [article.thumbnail_url for article in articles]
+        )
 
         # Create processed article
         processed_article = ProcessedArticle(
@@ -569,7 +576,8 @@ class ArticleSummarizer:
 
         # Save to database in a single transaction
         processed_id = self.db_client.save_processed_article_with_references(
-            processed_article, articles)
+            processed_article, articles
+        )
 
         # Generate and upload embeddings to BigQuery
         embeddings = self.ai_client.get_embeddings(processed_article)
@@ -607,10 +615,12 @@ def main(request):
 
         # Process articles
         summarizer = ArticleSummarizer(Config())
-        processed_article, processed_id = summarizer.process_articles(
-            article_ids)
+        processed_article, processed_id = summarizer.process_articles(article_ids)
 
-        return f'Processed Article Successfully with title: {processed_article.title}, ID: {processed_id}', 200
+        return (
+            f"Processed Article Successfully with title: {processed_article.title}, ID: {processed_id}",
+            200,
+        )
     except Exception as e:
         logger.error("Unexpected error: %s", e)
         return f"Internal server error: {e}", 500
