@@ -167,7 +167,8 @@ describe('SectionService', () => {
           // likeCount = 1 → 1*3 = 3
           // detailViewCount = 3 → 3*2 = 6
           // 합계 = 10 + 3 + 6 = 19
-          behaviorScore: 19,
+          // normalized = 1 + ((19 - 5) / (19 - 5)) * (3- 1) = 1 + 1 * 2 =3
+          behaviorScore: 3,
         },
         {
           sectionId: 2,
@@ -177,7 +178,8 @@ describe('SectionService', () => {
           // likeCount = 1 → 3
           // detailViewCount = 1 → 2
           // 합계 = 0 + 3 + 2 = 5
-          behaviorScore: 5,
+          // normalized = 1 + ((5- 5) / (19 - 5)) * (3 - 1) = 1 + 0 * 2 = 1
+          behaviorScore: 1,
         },
       ])
     })
@@ -187,6 +189,36 @@ describe('SectionService', () => {
 
       const result = await sectionService.getUserSectionStats(1)
       expect(result).toEqual([])
+    })
+
+    it('should not be normalized if there is only one section', async () => {
+      const mockData = [
+        {
+          id: 1,
+          name: 'politics',
+          user_article_section_preference: [{ preference: 3 }],
+          p_articles: [
+            {
+              likes: [{ id: 1, user_id: 1 }],
+              scraps: [],
+              ArticleViewEvent: [],
+            },
+          ],
+        },
+      ]
+
+      ;(prismaMock.articleSection.findMany as jest.Mock).mockResolvedValue(mockData)
+
+      const result = await sectionService.getUserSectionStats(1)
+
+      expect(result).toEqual([
+        {
+          sectionId: 1,
+          sectionName: 'politics',
+          preference: 3,
+          behaviorScore: 1, // 단일 섹션이므로 정규화하지 않고 Default 1
+        },
+      ])
     })
   })
 })
