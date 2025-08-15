@@ -335,7 +335,7 @@ class VertexAiClient:
     """Client for interacting with Vertex AI for content generation."""
 
     # Constants for better maintainability
-    MODEL_NAME = "google/gemini-2.5-pro"
+    MODEL_NAME = "google/gemini-2.5-flash"
 
     def __init__(self, project: str, location: str):
         self._project = project
