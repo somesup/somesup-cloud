@@ -140,3 +140,9 @@ resource "google_project_iam_member" "server_bigquery_editor" {
   role    = "roles/bigquery.dataEditor"
   member  = google_service_account.server.member
 }
+
+resource "google_project_iam_member" "server_cloud_run_invoker" {
+  project = var.project
+  role    = "roles/run.invoker"
+  member  = google_service_account.server.member
+}
