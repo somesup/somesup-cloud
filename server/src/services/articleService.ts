@@ -362,6 +362,7 @@ export const articleService = {
     }
 
     const allArticles = await articleService.getDetailedArticlesByIds(articleIds, userId)
+
     const articles = allArticles.slice(cursorIdx, cursorIdx + limit)
 
     if (articles.length === 0) {
@@ -403,8 +404,8 @@ export const articleService = {
   },
 
   /**
-   * 특정 ID의 기사들을 상세하게 조회합니다.
-   * 이 함수는 기사 ID 배열을 받아 해당 기사들의 상세 정보를 반환합니다.
+   * 특정 ID의 기사들을 상세하게 조회합니다. (순서 보장)
+   * 이 함수는 기사 ID 배열을 받아 해당 기사들의 상세 정보를 `ids`와 동일한 순서로 반환합니다.
    * @param ids - 조회할 기사 ID 배열
    * @param userId - 사용자의 ID (좋아요/스크랩 여부 확인용)
    * @return Promise<DetailedProcessedArticle[]> - 상세 기사 정보 배열
@@ -469,7 +470,12 @@ export const articleService = {
       },
     })
 
-    return articles.map((a) => ({
+    // 원본 `ids` 배열의 순서를 기준으로 정렬합니다.
+    // DB에 해당 ID의 기사가 없는 경우 undefined일 수 있으므로 필터링합니다.
+    const articleMap = new Map(articles.map((a) => [a.id, a]))
+    const sortedArticles = ids.map((id) => articleMap.get(id)).filter((a) => a !== undefined)
+
+    return sortedArticles.map((a) => ({
       id: a.id,
       section: {
         id: a.section.id,
