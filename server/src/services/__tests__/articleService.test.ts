@@ -407,6 +407,25 @@ describe('ArticleService', () => {
 
       expect(result[0].region).toBe(undefined)
     })
+
+    it('Should return articles in the same order as the input IDs', async () => {
+      // Arrange
+      const userId = 1 // 1. 의도적으로 순서를 섞어서 ID 배열을 정의합니다.
+      const requestedIds = [3, 1, 2] // 2. 각 ID에 해당하는 mock 데이터를 생성합니다.
+
+      const mockArticle1 = { ...mockRawDetailedArticle, id: 1 }
+      const mockArticle2 = { ...mockRawDetailedArticle, id: 2 }
+      const mockArticle3 = { ...mockRawDetailedArticle, id: 3 } // 3. DB가 ID 순서대로(즉, 요청 순서와 다르게) 결과를 반환하는 상황을 시뮬레이션합니다.
+
+      ;(prismaMock.processedArticle.findMany as jest.Mock).mockResolvedValue([mockArticle1, mockArticle2, mockArticle3]) // Act
+
+      const result = await articleService.getDetailedArticlesByIds(requestedIds, userId) // Assert
+      // 4. 최종 결과에서 ID만 추출하여 원래 요청했던 ID 배열 순서와 일치하는지 확인합니다.
+
+      const resultIds = result.map((article) => article.id)
+      expect(resultIds).toEqual(requestedIds) // [3, 1, 2] 순서여야 합니다.
+      expect(result.length).toBe(3)
+    })
   })
 
   describe('getDetailedArticleById', () => {

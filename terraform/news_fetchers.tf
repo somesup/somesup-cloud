@@ -42,6 +42,7 @@ module "newsapi_fetcher" {
   runtime             = "python313"
   available_memory_mb = "256Mi"
   entry_point         = "main"
+  max_instance_count  = 20
   environment_variables = {
     "NEWSAPI_API_KEY"          = data.google_secret_manager_secret_version.newsapi_api.secret_data
     "INSTANCE_CONNECTION_NAME" = google_sql_database_instance.mysql.connection_name
