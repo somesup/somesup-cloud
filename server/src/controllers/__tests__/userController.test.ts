@@ -11,11 +11,13 @@ import { AuthenticatedRequest } from '../../middlewares/authenticateJWT'
 import { Response } from 'express'
 import { sectionService } from '../../services/sectionService'
 import { keywordService } from '../../services/keywordService'
+import { articleService } from '../../services/articleService'
 
 jest.mock('../../utils/response')
 jest.mock('../../services/userService')
 jest.mock('../../services/sectionService')
 jest.mock('../../services/keywordService')
+jest.mock('../../services/articleService')
 
 let consoleErrorSpy: jest.SpyInstance
 
@@ -258,6 +260,7 @@ describe('updateUserSectionPreferences', () => {
 
     expect(userService.updateUserSectionPreferences).toHaveBeenCalledWith(1, preferences)
     expect(userService.requestUpdateUserEmbedding).toHaveBeenCalledWith(1)
+    expect(articleService.clearCachedRecommendations).toHaveBeenCalledWith(1)
     expect(success).toHaveBeenCalledWith(res, updatedPrefs, {
       message: 'User section preferences updated successfully',
     })

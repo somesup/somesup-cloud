@@ -5,6 +5,7 @@ import { AuthenticatedRequest } from '../middlewares/authenticateJWT'
 import { UserNotFoundError, userService } from '../services/userService'
 import { sectionService } from '../services/sectionService'
 import { keywordService } from '../services/keywordService'
+import { articleService } from '../services/articleService'
 
 /**
  * 사용자의 닉네임을 업데이트하는 컨트롤러입니다.
@@ -135,6 +136,9 @@ export const updateUserSectionPreferences = async (req: AuthenticatedRequest, re
 
     // 사용자 임베딩 벡터 업데이트 요청
     await userService.requestUpdateUserEmbedding(userId)
+
+    // 추천 캐시 초기화
+    await articleService.clearCachedRecommendations(userId)
 
     return success(res, updatedPrefs, {
       message: 'User section preferences updated successfully',

@@ -16,6 +16,7 @@ jest.mock('../../config/redis', () => ({
   redisClient: {
     get: jest.fn(),
     setEx: jest.fn(),
+    del: jest.fn(),
   },
 }))
 
@@ -147,6 +148,16 @@ describe('ArticleService', () => {
       await expect(articleService.setCachedRecommendations(userId, mockCache)).rejects.toThrow(
         'Redis connection failed',
       )
+    })
+  })
+
+  describe('clearCachedRecommendations', () => {
+    it('Successfully clears cached recommendations for a user', async () => {
+      const userId = 1
+
+      await articleService.clearCachedRecommendations(userId)
+
+      expect(redisClient.del).toHaveBeenCalledWith(`recommendations:${userId}`)
     })
   })
 
