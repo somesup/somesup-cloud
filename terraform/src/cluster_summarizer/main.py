@@ -336,6 +336,7 @@ class VertexAiClient:
 
     # Constants for better maintainability
     MODEL_NAME = "google/gemini-2.5-flash"
+    EMBEDDING_MODEL_NAME = "gemini-embedding-001"
 
     def __init__(self, project: str, location: str):
         self._project = project
@@ -449,9 +450,12 @@ class VertexAiClient:
         article: ProcessedArticle,
     ) -> list[google.genai.types.ContentEmbedding] | None:
         result = self._client.models.embed_content(
-            contents=f"{article.title}\n\n{article.full_summary}",
-            model="text-embedding-004",
-            config=google.genai.types.EmbedContentConfig(output_dimensionality=768),
+            contents=article.title,
+            model=self.EMBEDDING_MODEL_NAME,
+            config=google.genai.types.EmbedContentConfig(
+                output_dimensionality=768,
+                task_type="SEMANTIC_SIMILARITY",
+            ),
         )
 
         return result.embeddings
