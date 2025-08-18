@@ -73,6 +73,20 @@ export const articleService = {
   },
 
   /**
+   * 사용자 ID에 해당하는 추천 기사를 캐시에서 삭제합니다.
+   * 이 함수는 Redis에서 추천 기사 정보를 제거합니다.
+   * @param userId - 추천 기사를 캐시에서 삭제할 사용자의 ID
+   * @return Promise<void> - 캐시 삭제가 완료되면 반환되는 프로미스
+   * @example
+   * // 사용자 1에 대한 추천 기사를 캐시에서 삭제
+   *  clearCachedRecommendations(1)
+   */
+  clearCachedRecommendations: async (userId: number): Promise<void> => {
+    const cacheKey = `recommendations:${userId}`
+    await redisClient.del(cacheKey)
+  },
+
+  /**
    * 사용자 임베딩과 후보 기사 임베딩을 비교하여 유사도를 계산하고, 유사도에 따라 기사를 정렬합니다.
    * 이 함수는 BigQuery에 쿼리를 실행하여 유사도를 계산합니다.
    * @param userId - 추천을 받을 사용자의 ID
