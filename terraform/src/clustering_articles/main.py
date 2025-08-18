@@ -1,3 +1,4 @@
+import collections
 import contextlib
 import dataclasses
 import logging
@@ -9,10 +10,10 @@ import google.cloud.logging
 import google.cloud.sql.connector
 import google.genai
 import google.genai.types
+import hdbscan
 import numpy as np
 import pymysql
 import pymysql.cursors
-import sklearn.metrics.pairwise
 
 # Configure logging to Google Cloud Logging
 logging_client = google.cloud.logging.Client()
@@ -153,6 +154,9 @@ class DatabaseClient:
 
 class GeminiClient:
 
+    EMBEDDING_MODEL = "gemini-embedding-001"
+    OUTPUT_DIMENSIONALITY = 768
+
     def __init__(
         self,
         project: str,
@@ -187,18 +191,7 @@ class GeminiClient:
         Returns:
             A string containing the truncated content of the article.
         """
-        # 제목과 내용을 결합하되, 전체 길이가 max_content_length를 초과하지 않도록 함
-        title = article.title
-        available_content_length = (
-            self._max_content_length - len(title) - 2
-        )  # 2 for "\n\n"
-
-        if available_content_length > 0:
-            content = article.content[:available_content_length]
-            return f"{title}\n\n{content}"
-        else:
-            # 제목이 너무 길면 제목만 자르기
-            return title[: self._max_content_length]
+        return article.title[: self._max_content_length].strip()
 
     def _estimate_token_count(self, content: str) -> int:
         """Estimate token count for content.
@@ -267,16 +260,14 @@ class GeminiClient:
             self._truncate_embed_contents(article) for article in articles
         ]
 
-        # 배치 크기와 토큰 수 로깅
-        total_tokens = sum(
-            self._estimate_token_count(content) for content in article_contents
-        )
-
         try:
             result = self._client.models.embed_content(
                 contents=article_contents,
-                model="text-embedding-004",
-                config=google.genai.types.EmbedContentConfig(output_dimensionality=768),
+                model=self.EMBEDDING_MODEL,
+                config=google.genai.types.EmbedContentConfig(
+                    output_dimensionality=self.OUTPUT_DIMENSIONALITY,
+                    task_type="CLUSTERING",
+                ),
             )
             return result.embeddings
         except Exception as e:
@@ -305,9 +296,10 @@ class GeminiClient:
                 content = self._truncate_embed_contents(article)
                 result = self._client.models.embed_content(
                     contents=[content],
-                    model="text-embedding-004",
+                    model=self.EMBEDDING_MODEL,
                     config=google.genai.types.EmbedContentConfig(
-                        output_dimensionality=768
+                        output_dimensionality=self.OUTPUT_DIMENSIONALITY,
+                        task_type="CLUSTERING",
                     ),
                 )
                 if result.embeddings:
@@ -316,14 +308,14 @@ class GeminiClient:
                     logger.warning(f"No embedding returned for article {article.id}")
                     # 빈 임베딩 벡터 생성 (768차원)
                     dummy_embedding = google.genai.types.ContentEmbedding(
-                        values=[0.0] * 768
+                        values=[0.0] * self.OUTPUT_DIMENSIONALITY
                     )
                     embeddings.append(dummy_embedding)
             except Exception as e:
                 logger.error(f"Error getting embedding for article {article.id}: {e}")
                 # 오류 발생 시 더미 임베딩 추가
                 dummy_embedding = google.genai.types.ContentEmbedding(
-                    values=[0.0] * 768
+                    values=[0.0] * self.OUTPUT_DIMENSIONALITY
                 )
                 embeddings.append(dummy_embedding)
 
@@ -387,9 +379,13 @@ class GeminiClient:
 
 class ClusterClient:
 
-    def __init__(self, similarity_threshold: float):
+    MIN_CLUSTER_SIZE = 2
+    MIN_SAMPLES = 1
+    CLUSTER_SELECTION_EPSILON = 0.0
+
+    def __init__(self):
         """Initialize the ClusterClient."""
-        self._similarity_threshold = similarity_threshold
+        pass
 
     def cluster_articles(
         self,
@@ -397,9 +393,9 @@ class ClusterClient:
     ) -> list[list[SimpleArticle]]:
         """Cluster articles based on their embeddings.
 
-        This method clusters articles based on the cosine similarity of their
-        embedding vectors. It groups articles that have a cosine similarity
-        above the specified threshold into clusters.
+        This method uses HDBSCAN to cluster articles based on their embedding vectors.
+        It filters out articles with dummy embeddings (all zeros) and performs
+        L2 normalization on the embedding vectors before clustering.
 
         Args:
             articles: A list of SimpleArticle instances to cluster.
@@ -424,32 +420,28 @@ class ClusterClient:
 
         vectors = np.array([article.embedding_vector for article in valid_articles])
 
-        similarity_matrix = sklearn.metrics.pairwise.cosine_similarity(vectors)
+        # L2 정규화
+        norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+        safe_norms = np.where(norms == 0, 1, norms)  # 0으로 나누는 것을 방지
+        vectors = vectors / safe_norms
 
-        clusters = []
-        used_indices = set()
+        clusterer = hdbscan.HDBSCAN(
+            min_cluster_size=self.MIN_CLUSTER_SIZE,
+            min_samples=self.MIN_SAMPLES,
+            metric="euclidean",
+            cluster_selection_method="leaf",  # Excess of Mass
+            cluster_selection_epsilon=self.CLUSTER_SELECTION_EPSILON,
+        )
 
-        for i, article in enumerate(valid_articles):
-            if i in used_indices:
+        labels = clusterer.fit_predict(vectors)
+
+        clusters: dict[int, list[SimpleArticle]] = collections.defaultdict(list)
+        for i, label in enumerate(labels):
+            if label == -1:
                 continue
+            clusters[label].append(valid_articles[i])
 
-            similar_indices = []
-            for j in range(len(valid_articles)):
-                if j != i and similarity_matrix[i][j] >= self._similarity_threshold:
-                    similar_indices.append(j)
-
-            if similar_indices:
-                cluster = [article]
-                cluster.extend([valid_articles[j] for j in similar_indices])
-                clusters.append(cluster)
-
-                used_indices.add(i)
-                used_indices.update(similar_indices)
-            else:
-                clusters.append([article])
-                used_indices.add(i)
-
-        return clusters
+        return list(clusters.values())
 
 
 @functions_framework.http
@@ -476,7 +468,7 @@ def main(request):
         max_batch_size=config.MAX_BATCH_SIZE,
     )
 
-    cluster_client = ClusterClient(similarity_threshold=config.SIMILARITY_THRESHOLD)
+    cluster_client = ClusterClient()
 
     # Fetch unprocessed articles from the database
     unprocessed_articles = db_client.get_unprocessed_articles()
