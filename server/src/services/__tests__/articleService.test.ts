@@ -204,6 +204,18 @@ describe('ArticleService', () => {
         'BigQuery connection failed',
       )
     })
+
+    it('Return cadndiateArticles when no query result', async () => {
+      const userId = 1
+      const candidateArticleIds = [101, 102, 103]
+      const mockQueryResult: any[] = []
+
+      ;(bigqueryClient.query as jest.Mock).mockResolvedValue([mockQueryResult])
+
+      const result = await articleService.calculateSimilarityAndSort(userId, candidateArticleIds)
+
+      expect(result).toEqual(candidateArticleIds)
+    })
   })
 
   describe('getViewedArticleIdsByUser', () => {

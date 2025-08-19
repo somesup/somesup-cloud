@@ -136,6 +136,9 @@ export const articleService = {
     }
 
     const [rows] = await bigqueryClient.query(options)
+    if (rows.length === 0) {
+      return candidateArticleIds // 결과 값이 없는 경우 Fallback으로 후보 기사 IDs를 반환합니다.
+    }
     const sortedArticleIds = (rows as ArticleSimilarityRow[]).map((row) => row.p_article_id)
     return sortedArticleIds
   },
