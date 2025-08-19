@@ -22,7 +22,7 @@ resource "google_cloud_scheduler_job" "daily_article_processing" {
   name        = "daily-article-processing-trigger"
   description = "Trigger article-processing-workflow daily at midnight KST"
 
-  schedule  = "0 0 * * *"
+  schedule  = "0 0,12 * * *"
   time_zone = "Asia/Seoul"
 
   http_target {
