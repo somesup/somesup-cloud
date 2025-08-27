@@ -24,7 +24,7 @@ describe('articleController', () => {
 
   beforeEach(() => {
     req = { query: {}, params: {} }
-    res = {}
+    res = { set: jest.fn() }
     mockSuccessWithCursor.mockReset()
     mockSuccess.mockReset()
     mockInternalError.mockReset()
@@ -120,24 +120,72 @@ describe('articleController', () => {
       })
     })
 
-    it('should return recommended articles sucessfully', async () => {
+    it('should return recommended articles successfully with cache hit', async () => {
       req.userId = 1
       req.query = { limit: '10' }
 
-      const mockRecommendedArticlesByCursor = {
+      const mockCachedRecommendations = {
+        articleIds: [1, 2, 3],
+      }
+
+      const mockArticlesByCursor = {
         data: [{ id: 1, title: 'Article 1' }],
         hasNext: false,
         nextCursor: null,
       }
 
-      ;(articleService.getRecommendedArticlesByCursor as jest.Mock).mockResolvedValue(mockRecommendedArticlesByCursor)
+      ;(articleService.getCachedRecommendations as jest.Mock).mockResolvedValue(mockCachedRecommendations)
+      ;(articleService.getArticlesByCursor as jest.Mock).mockResolvedValue(mockArticlesByCursor)
 
       await getArticles(req, res)
 
-      expect(articleService.getRecommendedArticlesByCursor).toHaveBeenCalledWith(1, 10, undefined)
-      expect(mockSuccessWithCursor).toHaveBeenCalledWith(res, mockRecommendedArticlesByCursor.data, {
-        hasNext: mockRecommendedArticlesByCursor.hasNext,
-        nextCursor: mockRecommendedArticlesByCursor.nextCursor,
+      expect(articleService.getCachedRecommendations).toHaveBeenCalledWith(1)
+      expect(articleService.getArticlesByCursor).toHaveBeenCalledWith(
+        mockCachedRecommendations.articleIds,
+        1,
+        10,
+        undefined,
+      )
+      expect(res.set).toHaveBeenCalledWith('X-Cache', 'HIT')
+      expect(mockSuccessWithCursor).toHaveBeenCalledWith(res, mockArticlesByCursor.data, {
+        hasNext: mockArticlesByCursor.hasNext,
+        nextCursor: mockArticlesByCursor.nextCursor,
+        message: 'Articles retreived successfully',
+      })
+    })
+
+    it('should return recommended articles successfully with cache miss', async () => {
+      req.userId = 1
+      req.query = { limit: '10' }
+
+      const mockNewRecommendations = {
+        articleIds: [4, 5, 6],
+      }
+
+      const mockArticlesByCursor = {
+        data: [{ id: 4, title: 'Article 4' }],
+        hasNext: false,
+        nextCursor: null,
+      }
+
+      ;(articleService.getCachedRecommendations as jest.Mock).mockResolvedValue(null)
+      ;(articleService.regenerateUserCache as jest.Mock).mockResolvedValue(mockNewRecommendations)
+      ;(articleService.getArticlesByCursor as jest.Mock).mockResolvedValue(mockArticlesByCursor)
+
+      await getArticles(req, res)
+
+      expect(articleService.getCachedRecommendations).toHaveBeenCalledWith(1)
+      expect(articleService.regenerateUserCache).toHaveBeenCalledWith(1)
+      expect(articleService.getArticlesByCursor).toHaveBeenCalledWith(
+        mockNewRecommendations.articleIds,
+        1,
+        10,
+        undefined,
+      )
+      expect(res.set).toHaveBeenCalledWith('X-Cache', 'MISS')
+      expect(mockSuccessWithCursor).toHaveBeenCalledWith(res, mockArticlesByCursor.data, {
+        hasNext: mockArticlesByCursor.hasNext,
+        nextCursor: mockArticlesByCursor.nextCursor,
         message: 'Articles retreived successfully',
       })
     })
@@ -167,7 +215,7 @@ describe('articleController', () => {
     it('should return not found if no articles are found', async () => {
       req.userId = 1
       req.query = { limit: '10' }
-      ;(articleService.getRecommendedArticlesByCursor as jest.Mock).mockRejectedValue(
+      ;(articleService.getArticlesByCursor as jest.Mock).mockRejectedValue(
         new ArticleNotFoundError('No articles found'),
       )
 
@@ -181,7 +229,7 @@ describe('articleController', () => {
       req.userId = 1
       req.query = { limit: '10' }
       const error = new Error('Service error')
-      ;(articleService.getRecommendedArticlesByCursor as jest.Mock).mockRejectedValue(error)
+      ;(articleService.getArticlesByCursor as jest.Mock).mockRejectedValue(error)
 
       await getArticles(req, res)
 

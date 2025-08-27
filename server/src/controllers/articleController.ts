@@ -38,7 +38,18 @@ export const getArticles = async (req: AuthenticatedRequest, res: Response) => {
     } else if (highlight) {
       result = await articleService.getHighlightArticlesByCursor(userId, limit, cursor)
     } else {
-      result = await articleService.getRecommendedArticlesByCursor(userId, limit, cursor)
+      // 추천 기사 조회, 캐시 사용
+      const cachedRecommendations = await articleService.getCachedRecommendations(userId)
+      if (cachedRecommendations) {
+        // 캐시된 추천 기사가 있으면 이를 사용
+        result = await articleService.getArticlesByCursor(cachedRecommendations.articleIds, userId, limit, cursor)
+        res.set('X-Cache', 'HIT')
+      } else {
+        // 캐시된 추천 기사가 없으면 새로 생성
+        const newRecommendations = await articleService.regenerateUserCache(userId)
+        result = await articleService.getArticlesByCursor(newRecommendations.articleIds, userId, limit, cursor)
+        res.set('X-Cache', 'MISS')
+      }
     }
 
     return successWithCursor(res, result.data, {
