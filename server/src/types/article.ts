@@ -38,6 +38,7 @@ export interface ArticleSection {
 export interface ArticleProvider {
   id: number
   name: string
+  title: string
   friendlyName: string
   newsUrl: string
   logoUrl: string

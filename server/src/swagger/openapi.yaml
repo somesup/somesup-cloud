@@ -1332,6 +1332,9 @@ components:
         name:
           type: string
           example: 'Example News Provider'
+        title:
+          type: string
+          example: '원본 뉴스 제목'
         friendlyName:
           type: string
           example: '예시 뉴스 제공자'

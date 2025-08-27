@@ -454,6 +454,7 @@ export const articleService = {
               },
             },
             news_url: true,
+            title: true,
           },
         },
         keywords: {
@@ -501,6 +502,7 @@ export const articleService = {
       },
       providers: a.articles.map((art) => ({
         id: art.provider.id,
+        title: art.title,
         name: art.provider.name,
         friendlyName: art.provider.friendly_name,
         newsUrl: art.news_url,

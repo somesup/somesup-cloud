@@ -45,6 +45,7 @@ const mockRawDetailedArticle = {
         logo_url: 'https://example.com/logos/1.png',
       },
       news_url: 'https://news1.com/article/1',
+      title: 'Example News 1',
     },
     {
       provider: {
@@ -54,6 +55,7 @@ const mockRawDetailedArticle = {
         logo_url: 'https://example.com/logos/2.png',
       },
       news_url: 'https://news2.com/article/1',
+      title: 'Example News 2',
     },
   ],
   keywords: [
@@ -92,6 +94,7 @@ const mockDetailedArticle: DetailedProcessedArticle = {
     {
       id: 1,
       name: 'Test Provider',
+      title: 'Test News',
       friendlyName: '테스트 뉴스사',
       newsUrl: 'http://news1.com',
       logoUrl: 'http://logo1.com',
@@ -388,6 +391,7 @@ describe('ArticleService', () => {
           providers: mockRawDetailedArticle.articles.map((a) => ({
             id: a.provider.id,
             name: a.provider.name,
+            title: a.title,
             friendlyName: a.provider.friendly_name,
             newsUrl: a.news_url,
             logoUrl: a.provider.logo_url,
